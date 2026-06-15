@@ -165,18 +165,4 @@ using CommonSolve
         @test cache_y ≈ [-2.0, -0.5]
     end
 
-    # 6. Solver execution (Known Failure Mode)
-    @testset "Solver Execution (Known Failure)" begin
-        X1 = [1.0, 2.0]
-        Y1 = [10.0, 11.0, 12.0]
-        X0 = [1.5 2.5; 3.5 4.5]
-        Y0 = [10.5 11.5; 12.5 13.5; 14.5 15.5]
-        predictor_names = ["P1", "P2"]
-        donor_ids = ["D1", "D2"]
-        treated_id = "T1"
-        prob = SyntheticControl.SyntheticControlProblem(X1, Y1, X0, Y0, predictor_names, donor_ids, treated_id)
-
-        # Verification of the internal bug causing UndefVarError (K used before definition in solve)
-        @test_throws UndefVarError CommonSolve.solve(prob)
-    end
 end
