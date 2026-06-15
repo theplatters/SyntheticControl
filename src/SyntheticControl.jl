@@ -138,7 +138,6 @@ function CommonSolve.solve(prob::SyntheticControlProblem{T}) where {T}
 
     sol = Optimization.solve(opt_prob, BBO_adaptive_de_rand_1_bin_radiuslimited())
 
-    # Extract the final optimized results
     optimal_V = sol.u
     optimal_W = solver.W
     final_mspe = sol.objective
