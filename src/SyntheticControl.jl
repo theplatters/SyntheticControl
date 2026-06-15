@@ -46,14 +46,12 @@ end
 
 
 struct SyntheticControlResult{T <: AbstractFloat}
-    problem::SyntheticControlProblem{T}  # Link back to the original data
+    problem::SyntheticControlProblem{T}
     W::Vector{T}                         # Optimal unit weights (J x 1)
     V::Vector{T}                         # Optimal predictor weights (diagonal elements, K x 1)
     mspe::T                              # Final pre-treatment Mean Squared Prediction Error
 
-    # Convenient helper for evaluating post-treatment or plotting
     function SyntheticControlResult(prob, W, V, mspe)
-        # Ensure the output weights map back perfectly to the donor pool size
         length(W) == length(prob.donor_ids) || throw(DimensionMismatch("Weight vector W must match donor pool size"))
         return new{eltype(W)}(prob, W, V, mspe)
     end
@@ -113,7 +111,6 @@ function objective(u, p::SyntheticControlSolver{T}, opt_func) where {T}
     u0 = ones(T, J) / J
     params = (; X1 = prob.X1, X0 = prob.X0, V = u)
     opt_prob = OptimizationProblem(opt_func, u0, params, lcons = [one(T)], ucons = [one(T)], lb = lower_bounds, ub = upper_bounds)
-
 
     sol = solve(opt_prob, IPNewton())
     p.W .= sol.u
