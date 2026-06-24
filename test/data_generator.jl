@@ -57,7 +57,7 @@ function generate_synthetic_data(;
     X0 = zeros(T, K, J)
     for k in 1:K
         first_t = floor(Int, (k - 1) * T_pre / K) + 1
-        last_t = floor(Int, k * T_pre / K)
+        last_t = max(first_t, floor(Int, k * T_pre / K))
         window_length = T(last_t - first_t + 1)
         for j in 1:J
             window_sum = zero(T)

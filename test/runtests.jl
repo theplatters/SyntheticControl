@@ -17,7 +17,7 @@ function ipnewton_inner_solution(prob::Union{SyntheticControl.SyntheticControlDa
     data = prob isa SyntheticControl.SyntheticControlProblem ? prob.data : prob
     _K, J = size(prob.X0)
     v = Vector{Float64}(undef, length(raw_v))
-    SyntheticControl.normalize_v!(v, raw_v)
+    SyntheticControl.normalize_weights!(v, raw_v)
 
     inner_objective(u, p) = SyntheticControl.weight_squared_distance(p.X0, p.X1, p.V, u)
     cons(res, x, _p) = (res[1] = sum(x); nothing)
@@ -46,16 +46,16 @@ end
 
 function active_set_inner_solution(prob::Union{SyntheticControl.SyntheticControlData{T},SyntheticControl.SyntheticControlProblem{T}}, raw_v) where {T}
     data = prob isa SyntheticControl.SyntheticControlProblem ? prob.data : prob
-    cache = SyntheticControl.InnerProblemCache(prob)
-    SyntheticControl.solve_inner!(cache, raw_v)
+    cache = SyntheticControl.InnerWeightCache(prob)
+    SyntheticControl.evaluate_predictor_weights!(cache, raw_v)
     loss = SyntheticControl.weight_squared_distance(
         data.X0_normalized,
         data.X1_normalized,
-        cache.V,
-        cache.W
+        cache.predictor_weights,
+        cache.donor_weights
     )
 
-    return copy(cache.W), copy(cache.V), loss
+    return copy(cache.donor_weights), copy(cache.predictor_weights), loss
 end
 
 function assert_simplex_weights(w; atol)
@@ -139,6 +139,10 @@ end
         @test_throws DimensionMismatch SyntheticControl.SyntheticControlData(
             X1, Y1, X0, Y0, predictor_names, ["D1", "D2", "D3"], treated_id
         )
+
+        @test_throws ArgumentError SyntheticControl.SyntheticControlData(
+            [NaN, 2.0], Y1, X0, Y0, predictor_names, donor_ids, treated_id
+        )
     end
 
     # 3. SyntheticControlResult Construction & Validation
@@ -182,9 +186,12 @@ end
         @test solver isa SyntheticControl.SyntheticControlProblem{Float64}
         @test solver.data === data
         # Initial V weights should be uniform (1 / K)
-        @test solver.best_V ≈ [0.5, 0.5]
+        @test solver.best_predictor_weights ≈ [0.5, 0.5]
         # Initial W weights should be uniform (1 / J)
-        @test solver.best_W ≈ [0.5, 0.5]
+        @test solver.best_donor_weights ≈ [0.5, 0.5]
+        @test_throws ArgumentError SyntheticControl.SyntheticControlProblem(data; max_pair_starts=-1)
+        @test_throws ArgumentError SyntheticControl.SyntheticControlProblem(data; target_mspe=-1.0)
+        @test_throws ArgumentError SyntheticControl.SyntheticControlProblem(data; min_relative_mspe_improvement=-0.1)
     end
 
     # 5. Core Mathematical Functions
@@ -404,6 +411,14 @@ end
         @test SyntheticControl.calculate_mspe(prob.Y1, prob.Y0, true_W) < 1e-3
         # Weights should be sparse: at most 3 non-zero elements
         @test count(w -> w > 0.0, true_W) <= 3
+
+        # More predictors than pre-treatment periods should still produce finite window summaries.
+        prob_many_predictors, _ = DataGenerator.generate_synthetic_data(K=20, J=20, T_pre=15)
+        @test all(isfinite, prob_many_predictors.X0)
+        @test all(isfinite, prob_many_predictors.X1)
+        @test all(isfinite, prob_many_predictors.X0_normalized)
+        @test all(isfinite, prob_many_predictors.X1_normalized)
+        @test prob_many_predictors.nstarts <= 22
 
         # Float32 construction with custom sizes
         prob_f32, true_W_f32 = DataGenerator.generate_synthetic_data(T=Float32, K=3, J=6, T_pre=12)
