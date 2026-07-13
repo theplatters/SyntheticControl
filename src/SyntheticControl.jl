@@ -12,6 +12,7 @@ export pre_treatment_rmspe, post_treatment_rmspe, rmspe_ratio
 export placebo_rmspe_ratios, filter_placebos, randomization_p_value
 export pathplot, pathplot!, gapplot, gapplot!, placeboplot, placeboplot!
 export placebodistribution, placebodistribution!
+export from_table, weights_table, balance_table, path_table
 export solve
 
 const DEFAULT_MAX_PAIR_STARTS = 0
@@ -105,6 +106,90 @@ end
 include("classic_scm.jl")
 include("penalized_scm.jl")
 include("visualization.jl")
+
+"""
+    from_table(table; unit, time, outcome, predictors, treated, treatment_time, kwargs...)
+
+Construct a `SyntheticControlProblem` from a Tables.jl-compatible long-format
+panel after loading Tables.jl. The Tables extension materializes the source
+once, aggregates predictor columns over pre-treatment rows with means, and
+uses pre-treatment outcomes as `Y1` and `Y0`.
+
+This fallback method throws unless `using Tables` has activated the package
+extension. It has no side effects.
+
+# Examples
+
+```julia
+using SyntheticControl
+
+isdefined(SyntheticControl, :from_table)
+```
+"""
+function from_table(args...; kwargs...)
+  throw(ArgumentError("from_table requires loading Tables.jl: run `using SyntheticControl, Tables`"))
+end
+
+"""
+    weights_table(result)
+
+Return donor weights as a Tables.jl-compatible table after loading Tables.jl.
+The stable schema is `donor, weight`. This fallback method throws unless
+`using Tables` has activated the package extension.
+
+# Examples
+
+```julia
+using SyntheticControl
+
+isdefined(SyntheticControl, :weights_table)
+```
+"""
+function weights_table(args...; kwargs...)
+  throw(ArgumentError("weights_table requires loading Tables.jl: run `using SyntheticControl, Tables`"))
+end
+
+"""
+    balance_table(problem, result)
+
+Return predictor balance as a Tables.jl-compatible table after loading
+Tables.jl. The stable schema is `predictor, treated, synthetic, difference`.
+This fallback method throws unless `using Tables` has activated the package
+extension.
+
+# Examples
+
+```julia
+using SyntheticControl
+
+isdefined(SyntheticControl, :balance_table)
+```
+"""
+function balance_table(args...; kwargs...)
+  throw(ArgumentError("balance_table requires loading Tables.jl: run `using SyntheticControl, Tables`"))
+end
+
+"""
+    path_table(problem, result)
+
+Return actual, synthetic, gap, and post-treatment flags as a
+Tables.jl-compatible table after loading Tables.jl. The stable schema is
+`time, actual, synthetic, gap, post_treatment`. Problems built by
+`from_table` retain full panel paths; matrix-built problems return their
+pre-treatment fitted paths. This fallback method throws unless `using Tables`
+has activated the package extension.
+
+# Examples
+
+```julia
+using SyntheticControl
+
+isdefined(SyntheticControl, :path_table)
+```
+"""
+function path_table(args...; kwargs...)
+  throw(ArgumentError("path_table requires loading Tables.jl: run `using SyntheticControl, Tables`"))
+end
 
 
 end # module SyntheticControl

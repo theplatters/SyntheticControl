@@ -115,14 +115,14 @@ path_figure = pathplot(
   paths;
   actual_color=:black,
   synthetic_color=:dodgerblue3,
-  title="Observed vs synthetic path",
+  axis=(; title="Observed vs synthetic path"),
 )
 save(joinpath(output_dir, "pathplot.png"), path_figure)
 
 gap_figure = gapplot(
   paths;
   gap_color=:firebrick,
-  title="Treatment-effect gap",
+  axis=(; title="Treatment-effect gap"),
 )
 save(joinpath(output_dir, "gapplot.png"), gap_figure)
 
@@ -131,7 +131,7 @@ placebo_figure = placeboplot(
   pre_rmspe_threshold=1.0,
   treated_color=:firebrick,
   placebo_color=:gray45,
-  title="Treated and placebo gaps",
+  axis=(; title="Treated and placebo gaps"),
 )
 save(joinpath(output_dir, "placeboplot.png"), placebo_figure)
 
@@ -139,25 +139,23 @@ distribution_figure = placebodistribution(
   placebo;
   pre_rmspe_threshold=1.0,
   treated_color=:firebrick,
-  title="Placebo RMSPE ratios",
+  axis=(; title="Placebo RMSPE ratios"),
 )
 save(joinpath(output_dir, "placebodistribution.png"), distribution_figure)
 
 panel = Figure(size=(1100, 800))
-pathplot!(Axis(panel[1, 1]), paths; title="Paths")
-gapplot!(Axis(panel[2, 1]), paths; gap_color=:firebrick, title="Gap")
+pathplot!(Axis(panel[1, 1]; title="Paths"), paths)
+gapplot!(Axis(panel[2, 1]; title="Gap"), paths; gap_color=:firebrick)
 placeboplot!(
-  Axis(panel[1, 2]),
+  Axis(panel[1, 2]; title="Placebo gaps"),
   placebo;
   pre_rmspe_threshold=1.0,
-  title="Placebo gaps",
 )
 placebodistribution!(
-  Axis(panel[2, 2]),
+  Axis(panel[2, 2]; title="Placebo ratios"),
   placebo;
   pre_rmspe_threshold=1.0,
   treated_color=:firebrick,
-  title="Placebo ratios",
 )
 save(joinpath(output_dir, "all_visualizations.png"), panel)
 

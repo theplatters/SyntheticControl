@@ -512,6 +512,29 @@ end
 
 Makie recipe for observed and synthetic outcome paths. Load `GLMakie`,
 `CairoMakie`, or `Makie` to activate this plotting method.
+
+Recipe attributes style plotted elements: `actual_color`,
+`actual_linewidth`, `actual_linestyle`, `actual_label`,
+`synthetic_color`, `synthetic_linewidth`, `synthetic_linestyle`,
+`synthetic_label`, `treatment_color`, `treatment_linewidth`,
+`treatment_linestyle`, `treatment_label`, and `show_treatment`. Use
+`nothing` for a label to exclude that element from legends. Configure axis
+titles, labels, ticks, limits, and scales with `Axis(...)` or the
+non-mutating `axis=(; ...)` keyword. Configure legends with `axislegend` or
+`Legend`.
+
+# Examples
+
+```julia
+using SyntheticControl, CairoMakie
+
+paths = SyntheticControlPathData(1:3, 3, 3, [1.0, 2.0, 4.0], [1.0, 1.5, 2.0], "treated")
+fig = Figure()
+ax = Axis(fig[1, 1]; title="Paths")
+pathplot!(ax, paths; actual_color=:black, synthetic_linestyle=:dash)
+axislegend(ax)
+fig
+```
 """
 pathplot(args...; kwargs...) = _makie_extension_error(:pathplot)
 
@@ -519,7 +542,10 @@ pathplot(args...; kwargs...) = _makie_extension_error(:pathplot)
     pathplot!(axis_or_scene, result_or_paths; kwargs...)
 
 Mutating Makie recipe for observed and synthetic outcome paths. Load
-`GLMakie`, `CairoMakie`, or `Makie` to activate this plotting method.
+`GLMakie`, `CairoMakie`, or `Makie` to activate this plotting method. See
+[`pathplot`](@ref) for recipe attributes. This method adds plot primitives to
+the supplied axis or scene and does not modify axis titles, ticks, limits, or
+scales.
 """
 pathplot!(args...; kwargs...) = _makie_extension_error(:pathplot!)
 
@@ -529,6 +555,22 @@ pathplot!(args...; kwargs...) = _makie_extension_error(:pathplot!)
 
 Makie recipe for actual-minus-synthetic treatment-effect gaps. Load
 `GLMakie`, `CairoMakie`, or `Makie` to activate this plotting method.
+
+Recipe attributes are `gap_color`, `gap_linewidth`, `gap_linestyle`,
+`gap_label`, `zero_color`, `zero_linewidth`, `zero_linestyle`,
+`zero_label`, `show_zero`, `treatment_color`, `treatment_linewidth`,
+`treatment_linestyle`, `treatment_label`, and `show_treatment`. Configure
+axes and legends through Makie's standard `Axis`, `axis=(; ...)`,
+`axislegend`, and `Legend` APIs.
+
+# Examples
+
+```julia
+using SyntheticControl, CairoMakie
+
+paths = SyntheticControlPathData(1:3, 3, 3, [1.0, 2.0, 4.0], [1.0, 1.5, 2.0], "treated")
+gapplot(paths; gap_color=:firebrick, axis=(; title="Treatment effect"))
+```
 """
 gapplot(args...; kwargs...) = _makie_extension_error(:gapplot)
 
@@ -536,7 +578,9 @@ gapplot(args...; kwargs...) = _makie_extension_error(:gapplot)
     gapplot!(axis_or_scene, result_or_paths; kwargs...)
 
 Mutating Makie recipe for actual-minus-synthetic treatment-effect gaps. Load
-`GLMakie`, `CairoMakie`, or `Makie` to activate this plotting method.
+`GLMakie`, `CairoMakie`, or `Makie` to activate this plotting method. See
+[`gapplot`](@ref) for recipe attributes. This method preserves user-provided
+axis settings.
 """
 gapplot!(args...; kwargs...) = _makie_extension_error(:gapplot!)
 
@@ -546,6 +590,30 @@ gapplot!(args...; kwargs...) = _makie_extension_error(:gapplot!)
 
 Makie recipe for treated and placebo gap paths. Load `GLMakie`, `CairoMakie`,
 or `Makie` to activate this plotting method.
+
+Recipe attributes are `treated_color`, `treated_linewidth`,
+`treated_linestyle`, `treated_label`, `placebo_color`, `placebo_alpha`,
+`placebo_linewidth`, `placebo_linestyle`, `placebo_label`, `show_placebos`,
+`show_excluded`, `excluded_color`, `excluded_alpha`, `excluded_linewidth`,
+`excluded_linestyle`, `excluded_label`, `pre_rmspe_threshold`, `zero_color`,
+`zero_linewidth`, `zero_linestyle`, `zero_label`, `show_zero`,
+`treatment_color`, `treatment_linewidth`, `treatment_linestyle`,
+`treatment_label`, and `show_treatment`. Opacity attributes must be between
+0 and 1. Configure axes and legends with Makie.
+
+# Examples
+
+```julia
+using SyntheticControl, CairoMakie
+
+placebo = SyntheticControlPlaceboResult(
+  1:3, 3, 3, "treated", ["p1"],
+  [1.0, 2.0, 5.0], [1.0, 1.0, 2.0],
+  reshape([1.0, 2.0, 4.0], 3, 1),
+  reshape([1.0, 1.0, 1.0], 3, 1),
+)
+placeboplot(placebo; treated_color=:firebrick)
+```
 """
 placeboplot(args...; kwargs...) = _makie_extension_error(:placeboplot)
 
@@ -553,7 +621,9 @@ placeboplot(args...; kwargs...) = _makie_extension_error(:placeboplot)
     placeboplot!(axis_or_scene, placebo; kwargs...)
 
 Mutating Makie recipe for treated and placebo gap paths. Load `GLMakie`,
-`CairoMakie`, or `Makie` to activate this plotting method.
+`CairoMakie`, or `Makie` to activate this plotting method. See
+[`placeboplot`](@ref) for recipe attributes. This method preserves
+user-provided axis settings.
 """
 placeboplot!(args...; kwargs...) = _makie_extension_error(:placeboplot!)
 
@@ -564,6 +634,29 @@ placeboplot!(args...; kwargs...) = _makie_extension_error(:placeboplot!)
 Makie recipe for placebo RMSPE-ratio distributions and randomization
 p-values. Load `GLMakie`, `CairoMakie`, or `Makie` to activate this plotting
 method.
+
+Recipe attributes are `pre_rmspe_threshold`, `placebo_color`,
+`placebo_alpha`, `placebo_markersize`, `placebo_marker`, `placebo_label`,
+`treated_color`, `treated_alpha`, `treated_markersize`, `treated_marker`,
+`treated_label`, `treated_line_color`, `treated_linewidth`,
+`treated_linestyle`, `treated_line_label`, `show_treated_line`,
+`show_p_value`, `p_value_label`, `p_value_color`, `p_value_fontsize`, and
+`p_value_align`. Opacity attributes must be between 0 and 1. Configure axes
+and legends with Makie.
+
+# Examples
+
+```julia
+using SyntheticControl, CairoMakie
+
+placebo = SyntheticControlPlaceboResult(
+  1:3, 3, 3, "treated", ["p1"],
+  [1.0, 2.0, 5.0], [1.0, 1.0, 2.0],
+  reshape([1.0, 2.0, 4.0], 3, 1),
+  reshape([1.0, 1.0, 1.0], 3, 1),
+)
+placebodistribution(placebo; treated_color=:firebrick)
+```
 """
 placebodistribution(args...; kwargs...) = _makie_extension_error(:placebodistribution)
 
@@ -572,6 +665,7 @@ placebodistribution(args...; kwargs...) = _makie_extension_error(:placebodistrib
 
 Mutating Makie recipe for placebo RMSPE-ratio distributions and randomization
 p-values. Load `GLMakie`, `CairoMakie`, or `Makie` to activate this plotting
-method.
+method. See [`placebodistribution`](@ref) for recipe attributes. This method
+preserves user-provided axis settings.
 """
 placebodistribution!(args...; kwargs...) = _makie_extension_error(:placebodistribution!)

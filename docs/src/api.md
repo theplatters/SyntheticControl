@@ -14,6 +14,10 @@ CommonSolve.solve(::SyntheticControlProblem)
 CommonSolve.solve(::PenalizedSyntheticControlProblem)
 SyntheticControlPathData
 SyntheticControlPlaceboResult
+from_table
+weights_table
+balance_table
+path_table
 ```
 
 ## Public Mathematical Helpers

@@ -6,13 +6,18 @@ using CairoMakie
 using SyntheticControl
 using CommonSolve
 using LinearAlgebra
+using Tables
 
 CairoMakie.activate!()
+
+if Base.get_extension(SyntheticControl, :SyntheticControlTablesExt) === nothing
+  include(joinpath(@__DIR__, "..", "ext", "SyntheticControlTablesExt.jl"))
+end
 
 DocMeta.setdocmeta!(
   SyntheticControl,
   :DocTestSetup,
-  :(using SyntheticControl, CommonSolve, LinearAlgebra, CairoMakie);
+  :(using SyntheticControl, CommonSolve, LinearAlgebra, CairoMakie, Tables);
   recursive=true,
 )
 
@@ -31,6 +36,7 @@ makedocs(
     "End-to-End Example" => "example.md",
     "Solver Configuration" => "solver_configuration.md",
     "Interpreting Results" => "interpreting_results.md",
+    "Tables Integration" => "tables.md",
     "Visualization" => "visualization.md",
     "API Reference" => "api.md",
     "Implementation Details" => "internals.md",

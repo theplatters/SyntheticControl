@@ -7,6 +7,7 @@ This is a Julia package named `SyntheticControl`.
 - `src/SyntheticControl.jl`: main package module, public types, solver implementation, and internal optimization caches.
 - `src/visualization.jl`: backend-independent visualization data containers, statistical helpers, and public Makie plotting entry points.
 - `ext/SyntheticControlMakieExt.jl`: Makie weak-dependency extension defining full recipes and `Makie.plot!` implementations.
+- `ext/SyntheticControlTablesExt.jl`: Tables.jl weak-dependency extension for long-format panel input and table-shaped result output. It activates only after both `using SyntheticControl` and `using Tables`.
 - `test/runtests.jl`: package test suite using Julia `Test`.
 - `test/visualization_tests.jl`: statistical visualization-helper tests and Makie recipe structure tests.
 - `test/data_generator.jl`: synthetic data generator used by tests and local benchmarks.
@@ -76,6 +77,21 @@ Visualization architecture is split deliberately: statistical helpers and valida
 
 The public Makie recipes are `pathplot`, `gapplot`, `placeboplot`, and `placebodistribution`, each with mutating `!` forms. `pathplot` compares observed and synthetic paths; `gapplot` shows actual-minus-synthetic gaps; `placeboplot` compares treated and placebo gaps after documented filtering; `placebodistribution` shows post/pre RMSPE ratios and the finite-sample randomization p-value.
 
+Makie recipe customization follows Makie's standard split between recipe, Axis, Figure, and Legend attributes. Recipe attributes control plotted content and appearance only. Axis attributes such as `title`, `xlabel`, `ylabel`, ticks, limits, scales, grids, and tick formatting belong on `Axis(...)` or the non-mutating `axis=(; ...)` keyword. Figure attributes belong on `Figure(...)` or `figure=(; ...)`. Legend placement, orientation, titles, columns, and styling belong to `axislegend` or `Legend`; recipes should expose child `label` attributes and should not implement recipe-specific legend layout.
+
+Public recipe attributes include:
+
+- `pathplot`: `actual_color`, `actual_linewidth`, `actual_linestyle`, `actual_label`, `synthetic_color`, `synthetic_linewidth`, `synthetic_linestyle`, `synthetic_label`, `treatment_color`, `treatment_linewidth`, `treatment_linestyle`, `treatment_label`, and `show_treatment`.
+- `gapplot`: `gap_color`, `gap_linewidth`, `gap_linestyle`, `gap_label`, `zero_color`, `zero_linewidth`, `zero_linestyle`, `zero_label`, `show_zero`, `treatment_color`, `treatment_linewidth`, `treatment_linestyle`, `treatment_label`, and `show_treatment`.
+- `placeboplot`: `treated_color`, `treated_linewidth`, `treated_linestyle`, `treated_label`, `placebo_color`, `placebo_alpha`, `placebo_linewidth`, `placebo_linestyle`, `placebo_label`, `show_placebos`, `show_excluded`, `excluded_color`, `excluded_alpha`, `excluded_linewidth`, `excluded_linestyle`, `excluded_label`, `pre_rmspe_threshold`, `zero_color`, `zero_linewidth`, `zero_linestyle`, `zero_label`, `show_zero`, `treatment_color`, `treatment_linewidth`, `treatment_linestyle`, `treatment_label`, and `show_treatment`.
+- `placebodistribution`: `pre_rmspe_threshold`, `placebo_color`, `placebo_alpha`, `placebo_markersize`, `placebo_marker`, `placebo_label`, `treated_color`, `treated_alpha`, `treated_markersize`, `treated_marker`, `treated_label`, `treated_line_color`, `treated_linewidth`, `treated_linestyle`, `treated_line_label`, `show_treated_line`, `show_p_value`, `p_value_label`, `p_value_color`, `p_value_fontsize`, and `p_value_align`.
+
+Makie `plot!` methods must not create `Figure` or `Axis` objects and must not overwrite user-provided axis titles, labels, ticks, limits, or scales. Non-mutating calls may provide default SCM axis labels through Makie's axis-hint mechanisms, but explicit `axis=(; ...)` values and mutating calls into an existing `Axis` must win. Propagate recipe attributes to child plots as observables, use `@inherit` for Makie-wide defaults such as `linewidth`, `markersize`, `marker`, and `fontsize`, and validate only recipe-specific constraints such as non-negative line widths and opacity values in `[0, 1]`.
+
+Tables.jl integration must stay in `ext/SyntheticControlTablesExt.jl`; the core package only declares generic public hooks. The public table API is `from_table`, `weights_table`, `balance_table`, and `path_table`. `from_table` accepts Tables.jl-compatible long panels with unit, time, outcome, and predictor columns selected by `Symbol` or `String`. It materializes the complete panel once, rejects duplicate `(unit, time)` observations, unbalanced panels, missing/non-finite numeric values, non-numeric outcomes or predictors, unknown columns, absent treated units, empty donor pools, and treatment times outside observed values. It sorts time values and donor identifiers explicitly so row order does not affect results.
+
+Tables matrix orientation conventions are fixed: `X1` is length `K`, `X0` is `K × J`, `Y1` is length `T_pre`, and `Y0` is `T_pre × J`. Predictor columns are mean-aggregated over pre-treatment observations only, where times before `treatment_time` are pre-treatment and `treatment_time` is the first post-treatment period. `weights_table` returns `donor, weight`; `balance_table` returns `predictor, treated, synthetic, difference`; `path_table` returns `time, actual, synthetic, gap, post_treatment`. Return lightweight Tables.jl-compatible objects, not DataFrames or other concrete sink types.
+
 ## Testing Guidelines
 
 Tests use Julia’s standard `Test` framework. Add regression tests for:
@@ -90,6 +106,10 @@ Keep tests deterministic by passing explicit seeds when randomness matters. Run 
 Documentation examples are tested by Documenter. Run `julia --project=docs docs/make.jl` after changing docstrings or files under `docs/src/`; the build is configured to fail on missing docstrings, invalid references, and doctest failures.
 
 Visualization changes need tests for both layers: numerical tests for gaps, RMSPE values, ratios, placebo filtering, and p-values; recipe tests for mutating/non-mutating Makie calls, child plot structure, marker locations, and attribute propagation. Prefer inspecting Makie plot objects and converted arguments over pixel comparisons. Run at least a lightweight GLMakie smoke test when changing the extension, and use CairoMakie for headless documentation rendering.
+
+Recipe customization changes also need tests that every documented recipe attribute is accepted, attributes propagate to the intended child plot, independent styling works for actual, synthetic, treated, placebo, treatment, zero, marker, and distribution elements, `nothing` labels suppress legend entries, `axislegend(ax)` discovers labeled child elements, explicit `Axis` settings are preserved, non-mutating `axis=(; ...)` values work, `with_theme` and observable updates affect inherited or observable-backed attributes, and invalid recipe-specific values fail clearly. Update `docs/src/visualization.md` and recipe docstrings when adding, removing, or renaming public recipe attributes.
+
+Tables extension changes need tests for activation with Tables.jl, named-tuple column tables, row tables, minimal custom Tables.jl sources, single-pass schema-less sources, shuffled input rows, multiple predictors, matrix orientations and values, output schemas, solver integration, non-string identifiers, supported time types, and validation failures. Update `docs/src/tables.md` and run the Documenter build after changing public table behavior or docstrings.
 
 ## Commit & Pull Request Guidelines
 

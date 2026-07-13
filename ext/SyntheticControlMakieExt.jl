@@ -13,114 +13,116 @@ function _paths(input::SyntheticControl.SyntheticControlResultLike)
   return SyntheticControl.SyntheticControlPathData(input)
 end
 
-function _legend_position(axis, position)
-  position === nothing && return nothing
-  return axis isa Makie.Axis ? Makie.axislegend(axis; position=position) : nothing
+function _nonnegative(value, name::Symbol)
+  value < 0 && throw(ArgumentError("$name must be non-negative"))
+  return value
 end
 
-function _deduplicated_legend!(axis, labels, plots; position=:best)
-  axis isa Makie.Axis || return nothing
-  position === nothing && return nothing
-  seen = Set{String}()
-  unique_labels = String[]
-  unique_plots = Any[]
-  for (label, plot) in zip(labels, plots)
-    label in seen && continue
-    push!(seen, label)
-    push!(unique_labels, label)
-    push!(unique_plots, plot)
+function _opacity(value, name::Symbol)
+  0 <= value <= 1 || throw(ArgumentError("$name must be between 0 and 1"))
+  return value
+end
+
+function _validated_nonnegative(attribute, name::Symbol)
+  return Makie.lift(value -> _nonnegative(value, name), attribute)
+end
+
+function _color_with_alpha(color_attribute, alpha_attribute, alpha_name::Symbol)
+  return Makie.lift(color_attribute, alpha_attribute) do color, alpha
+    return (color, _opacity(alpha, alpha_name))
   end
-  return Makie.axislegend(axis, unique_plots, unique_labels; position=position)
-end
-
-function _axis(plot)
-  axis = Makie.current_axis()
-  return axis isa Makie.Axis ? axis : Makie.parent(Makie.parent_scene(plot))
-end
-
-function _set_axis_labels!(plot, xlabel, ylabel, title)
-  axis = _axis(plot)
-  if axis isa Makie.Axis
-    axis.xlabel = xlabel
-    axis.ylabel = ylabel
-    axis.title = title
-  end
-  return nothing
 end
 
 """
     pathplot(result_or_paths; kwargs...)
     pathplot!(axis_or_scene, result_or_paths; kwargs...)
 
-Makie full recipe for observed treated-unit outcomes and synthetic-control
-counterfactual paths. `result_or_paths` may be an existing
-`SyntheticControlResult`, `PenalizedSyntheticControlResult`, or prepared
-`SyntheticControlPathData`.
+Plot observed treated-unit outcomes and synthetic-control counterfactual
+paths. `result_or_paths` may be a `SyntheticControlResult`,
+`PenalizedSyntheticControlResult`, or prepared `SyntheticControlPathData`.
 
-Attributes include `actual_color`, `synthetic_color`, line styles,
-`linewidth`, treatment-line styling, `show_treatment`, `xlabel`, `ylabel`,
-`title`, and `legend_position`.
+Recipe attributes style the plotted elements only. Configure axes with
+`Axis(...)` or the non-mutating `axis=(; ...)` keyword, and create legends
+with `axislegend` or `Legend`.
+
+# Examples
+
+```julia
+using SyntheticControl, CairoMakie
+
+paths = SyntheticControlPathData(1:3, 3, 3, [1.0, 2.0, 4.0], [1.0, 1.5, 2.0], "treated")
+fig = Figure()
+ax = Axis(fig[1, 1]; title="Paths")
+pathplot!(ax, paths; actual_color=:black, synthetic_linestyle=:dash)
+axislegend(ax)
+fig
+```
 """
 Makie.@recipe PathPlot (result,) begin
   "Color of the observed treated-unit path."
   actual_color = @inherit color :black
-  "Color of the synthetic-control path."
-  synthetic_color = :dodgerblue3
+  "Line width of the observed treated-unit path. Must be non-negative."
+  actual_linewidth = @inherit linewidth 2
   "Line style of the observed treated-unit path."
   actual_linestyle = nothing
+  "Legend label for the observed treated-unit path. Use `nothing` to exclude it."
+  actual_label = "Observed"
+  "Color of the synthetic-control path."
+  synthetic_color = :dodgerblue3
+  "Line width of the synthetic-control path. Must be non-negative."
+  synthetic_linewidth = @inherit linewidth 2
   "Line style of the synthetic-control path."
   synthetic_linestyle = :dash
-  "Line width for actual and synthetic paths."
-  linewidth = @inherit linewidth 2
+  "Legend label for the synthetic-control path. Use `nothing` to exclude it."
+  synthetic_label = "Synthetic"
   "Color of the treatment-time marker."
   treatment_color = :gray35
+  "Line width of the treatment-time marker. Must be non-negative."
+  treatment_linewidth = @inherit linewidth 2
   "Line style of the treatment-time marker."
   treatment_linestyle = :dash
+  "Legend label for the treatment-time marker. Use `nothing` to exclude it."
+  treatment_label = "Treatment"
   "Whether to draw the treatment-time marker."
   show_treatment = true
-  "X-axis label."
-  xlabel = "Time"
-  "Y-axis label."
-  ylabel = "Outcome"
-  "Axis title."
-  title = "Observed and synthetic outcomes"
-  "Legend position, or `nothing` to skip creating a legend."
-  legend_position = :rt
 end
+
+Makie.preferred_axis_type(::PathPlot) = Makie.Axis
+Makie.preferred_axis_attributes(::Type{<:Makie.Axis}, ::PathPlot) = (;
+  xlabel="Time",
+  ylabel="Outcome",
+  title="Observed and synthetic outcomes",
+)
 
 function Makie.plot!(plot::PathPlot)
   paths = _paths(plot.result[])
-  _set_axis_labels!(plot, plot.xlabel[], plot.ylabel[], plot.title[])
-  actual_plot = Makie.lines!(
+  Makie.lines!(
     plot,
     paths.time,
     paths.actual;
     color=plot.actual_color,
     linestyle=plot.actual_linestyle,
-    linewidth=plot.linewidth,
-    label="Observed $(paths.treated_id)",
+    linewidth=_validated_nonnegative(plot.actual_linewidth, :actual_linewidth),
+    label=plot.actual_label,
   )
-  synthetic_plot = Makie.lines!(
+  Makie.lines!(
     plot,
     paths.time,
     paths.synthetic;
     color=plot.synthetic_color,
     linestyle=plot.synthetic_linestyle,
-    linewidth=plot.linewidth,
-    label="Synthetic $(paths.treated_id)",
+    linewidth=_validated_nonnegative(plot.synthetic_linewidth, :synthetic_linewidth),
+    label=plot.synthetic_label,
   )
   if plot.show_treatment[]
-    treatment_plot = Makie.vlines!(
+    Makie.vlines!(
       plot,
       [paths.treatment_time];
       color=plot.treatment_color,
       linestyle=plot.treatment_linestyle,
-      linewidth=plot.linewidth,
-      label="Treatment",
+      linewidth=_validated_nonnegative(plot.treatment_linewidth, :treatment_linewidth),
+      label=plot.treatment_label,
     )
-    _deduplicated_legend!(_axis(plot), ["Observed", "Synthetic", "Treatment"], [actual_plot, synthetic_plot, treatment_plot]; position=plot.legend_position[])
-  else
-    _deduplicated_legend!(_axis(plot), ["Observed", "Synthetic"], [actual_plot, synthetic_plot]; position=plot.legend_position[])
   end
   return plot
 end
@@ -129,71 +131,82 @@ end
     gapplot(result_or_paths; kwargs...)
     gapplot!(axis_or_scene, result_or_paths; kwargs...)
 
-Makie full recipe for the treatment-effect gap
-`actual_outcome .- synthetic_outcome`. Draws a horizontal zero line and a
-vertical treatment-time marker.
+Plot the treatment-effect gap `actual_outcome .- synthetic_outcome` with
+optional zero and treatment-time reference lines.
+
+Recipe attributes style the gap, zero line, and treatment marker. Configure
+axes and legends through Makie's normal `Axis`, `axis=(; ...)`, `axislegend`,
+and `Legend` APIs.
 """
 Makie.@recipe GapPlot (result,) begin
   "Color of the gap path."
   gap_color = @inherit color :black
+  "Line width of the gap path. Must be non-negative."
+  gap_linewidth = @inherit linewidth 2
   "Line style of the gap path."
   gap_linestyle = nothing
-  "Line width of the gap path."
-  gap_linewidth = @inherit linewidth 2
+  "Legend label for the gap path. Use `nothing` to exclude it."
+  gap_label = "Gap"
   "Color of the horizontal zero line."
   zero_color = :gray50
+  "Line width of the horizontal zero line. Must be non-negative."
+  zero_linewidth = 1
   "Line style of the horizontal zero line."
   zero_linestyle = :dot
-  "Line width of the horizontal zero line."
-  zero_linewidth = 1
+  "Legend label for the zero line. Use `nothing` to exclude it."
+  zero_label = "Zero"
+  "Whether to draw the horizontal zero line."
+  show_zero = true
   "Color of the treatment-time marker."
   treatment_color = :gray35
+  "Line width of the treatment-time marker. Must be non-negative."
+  treatment_linewidth = 1
   "Line style of the treatment-time marker."
   treatment_linestyle = :dash
-  "Line width of the treatment-time marker."
-  treatment_linewidth = 1
+  "Legend label for the treatment-time marker. Use `nothing` to exclude it."
+  treatment_label = "Treatment"
   "Whether to draw the treatment-time marker."
   show_treatment = true
-  "X-axis label."
-  xlabel = "Time"
-  "Y-axis label."
-  ylabel = "Actual - synthetic"
-  "Axis title."
-  title = "Synthetic-control gap"
-  "Legend position, or `nothing` to skip creating a legend."
-  legend_position = :rt
 end
+
+Makie.preferred_axis_type(::GapPlot) = Makie.Axis
+Makie.preferred_axis_attributes(::Type{<:Makie.Axis}, ::GapPlot) = (;
+  xlabel="Time",
+  ylabel="Actual - synthetic",
+  title="Synthetic-control gap",
+)
 
 function Makie.plot!(plot::GapPlot)
   paths = _paths(plot.result[])
   gap = SyntheticControl.outcome_gap(paths)
-  _set_axis_labels!(plot, plot.xlabel[], plot.ylabel[], plot.title[])
-  zero_plot = Makie.hlines!(
-    plot,
-    [zero(eltype(gap))];
-    color=plot.zero_color,
-    linestyle=plot.zero_linestyle,
-    linewidth=plot.zero_linewidth,
-  )
-  gap_plot = Makie.lines!(
+  if plot.show_zero[]
+    Makie.hlines!(
+      plot,
+      [zero(eltype(gap))];
+      color=plot.zero_color,
+      linestyle=plot.zero_linestyle,
+      linewidth=_validated_nonnegative(plot.zero_linewidth, :zero_linewidth),
+      label=plot.zero_label,
+    )
+  end
+  Makie.lines!(
     plot,
     paths.time,
     gap;
     color=plot.gap_color,
     linestyle=plot.gap_linestyle,
-    linewidth=plot.gap_linewidth,
+    linewidth=_validated_nonnegative(plot.gap_linewidth, :gap_linewidth),
+    label=plot.gap_label,
   )
   if plot.show_treatment[]
-    treatment_plot = Makie.vlines!(
+    Makie.vlines!(
       plot,
       [paths.treatment_time];
       color=plot.treatment_color,
       linestyle=plot.treatment_linestyle,
-      linewidth=plot.treatment_linewidth,
+      linewidth=_validated_nonnegative(plot.treatment_linewidth, :treatment_linewidth),
+      label=plot.treatment_label,
     )
-    _deduplicated_legend!(_axis(plot), ["Gap", "Zero", "Treatment"], [gap_plot, zero_plot, treatment_plot]; position=plot.legend_position[])
-  else
-    _deduplicated_legend!(_axis(plot), ["Gap", "Zero"], [gap_plot, zero_plot]; position=plot.legend_position[])
   end
   return plot
 end
@@ -202,99 +215,141 @@ end
     placeboplot(placebo; kwargs...)
     placeboplot!(axis_or_scene, placebo; kwargs...)
 
-Makie full recipe for treated and placebo gap paths. Placebo filtering is
-computed by `filter_placebos`; rendering only consumes the resulting inclusion
-mask.
+Plot treated and placebo gap paths. Placebo filtering is computed by
+`filter_placebos`; rendering consumes the resulting inclusion mask.
+
+Use recipe attributes for line appearance, opacity, labels, optional excluded
+placebos, zero lines, and treatment markers. Use Makie's standard axis and
+legend APIs for layout, ticks, titles, and legend placement.
 """
 Makie.@recipe PlaceboPlot (placebo,) begin
   "Color of the treated-unit gap."
   treated_color = @inherit color :black
-  "Line width of the treated-unit gap."
+  "Line width of the treated-unit gap. Must be non-negative."
   treated_linewidth = 3
+  "Line style of the treated-unit gap."
+  treated_linestyle = nothing
+  "Legend label for the treated-unit gap. Use `nothing` to exclude it."
+  treated_label = "Treated"
   "Color of included placebo gaps."
   placebo_color = :gray45
-  "Transparency applied to included placebo gaps."
+  "Opacity of included placebo gaps. Must be between 0 and 1."
   placebo_alpha = 0.35
-  "Line width of placebo gaps."
+  "Line width of included placebo gaps. Must be non-negative."
   placebo_linewidth = 1
+  "Line style of included placebo gaps."
+  placebo_linestyle = nothing
+  "Legend label for the first included placebo gap. Use `nothing` to exclude it."
+  placebo_label = "Included placebos"
+  "Whether to draw included placebo gaps."
+  show_placebos = true
   "Whether to show excluded placebo gaps."
   show_excluded = false
   "Color of excluded placebo gaps when shown."
   excluded_color = :gray80
-  "Transparency applied to excluded placebo gaps."
+  "Opacity of excluded placebo gaps when shown. Must be between 0 and 1."
   excluded_alpha = 0.18
+  "Line width of excluded placebo gaps. Must be non-negative."
+  excluded_linewidth = 1
+  "Line style of excluded placebo gaps."
+  excluded_linestyle = nothing
+  "Legend label for the first excluded placebo gap. Use `nothing` to exclude it."
+  excluded_label = "Excluded placebos"
   "Absolute pre-treatment RMSPE cutoff for placebo inclusion, or `nothing`."
   pre_rmspe_threshold = nothing
   "Color of the horizontal zero line."
   zero_color = :gray50
+  "Line width of the horizontal zero line. Must be non-negative."
+  zero_linewidth = 1
   "Line style of the horizontal zero line."
   zero_linestyle = :dot
+  "Legend label for the zero line. Use `nothing` to exclude it."
+  zero_label = "Zero"
+  "Whether to draw the horizontal zero line."
+  show_zero = true
   "Color of the treatment-time marker."
   treatment_color = :gray35
+  "Line width of the treatment-time marker. Must be non-negative."
+  treatment_linewidth = 1
   "Line style of the treatment-time marker."
   treatment_linestyle = :dash
+  "Legend label for the treatment-time marker. Use `nothing` to exclude it."
+  treatment_label = "Treatment"
   "Whether to draw the treatment-time marker."
   show_treatment = true
-  "X-axis label."
-  xlabel = "Time"
-  "Y-axis label."
-  ylabel = "Actual - synthetic"
-  "Axis title."
-  title = "Treated and placebo gaps"
-  "Legend position, or `nothing` to skip creating a legend."
-  legend_position = :rt
 end
+
+Makie.preferred_axis_type(::PlaceboPlot) = Makie.Axis
+Makie.preferred_axis_attributes(::Type{<:Makie.Axis}, ::PlaceboPlot) = (;
+  xlabel="Time",
+  ylabel="Actual - synthetic",
+  title="Treated and placebo gaps",
+)
 
 function Makie.plot!(plot::PlaceboPlot)
   placebo = plot.placebo[]
   included = SyntheticControl.filter_placebos(placebo; pre_rmspe_threshold=plot.pre_rmspe_threshold[])
   gaps = SyntheticControl.placebo_gaps(placebo)
   treated_gap = placebo.treated_actual .- placebo.treated_synthetic
-  _set_axis_labels!(plot, plot.xlabel[], plot.ylabel[], plot.title[])
-  zero_plot = Makie.hlines!(plot, [zero(eltype(treated_gap))]; color=plot.zero_color, linestyle=plot.zero_linestyle)
-  included_plot = nothing
-  excluded_plot = nothing
+
+  if plot.show_zero[]
+    Makie.hlines!(
+      plot,
+      [zero(eltype(treated_gap))];
+      color=plot.zero_color,
+      linestyle=plot.zero_linestyle,
+      linewidth=_validated_nonnegative(plot.zero_linewidth, :zero_linewidth),
+      label=plot.zero_label,
+    )
+  end
+
+  included_label_used = false
+  excluded_label_used = false
   for donor in axes(gaps, 2)
-    if included[donor] || plot.show_excluded[]
-      color = included[donor] ? (plot.placebo_color[], plot.placebo_alpha[]) : (plot.excluded_color[], plot.excluded_alpha[])
-      placebo_plot = Makie.lines!(
+    if included[donor] && plot.show_placebos[]
+      Makie.lines!(
         plot,
         placebo.time,
         gaps[:, donor];
-        color=color,
-        linewidth=plot.placebo_linewidth,
+        color=_color_with_alpha(plot.placebo_color, plot.placebo_alpha, :placebo_alpha),
+        linewidth=_validated_nonnegative(plot.placebo_linewidth, :placebo_linewidth),
+        linestyle=plot.placebo_linestyle,
+        label=included_label_used ? nothing : plot.placebo_label,
       )
-      if included[donor] && included_plot === nothing
-        included_plot = placebo_plot
-      elseif !included[donor] && excluded_plot === nothing
-        excluded_plot = placebo_plot
-      end
+      included_label_used = true
+    elseif !included[donor] && plot.show_excluded[]
+      Makie.lines!(
+        plot,
+        placebo.time,
+        gaps[:, donor];
+        color=_color_with_alpha(plot.excluded_color, plot.excluded_alpha, :excluded_alpha),
+        linewidth=_validated_nonnegative(plot.excluded_linewidth, :excluded_linewidth),
+        linestyle=plot.excluded_linestyle,
+        label=excluded_label_used ? nothing : plot.excluded_label,
+      )
+      excluded_label_used = true
     end
   end
-  treated_plot = Makie.lines!(
+
+  Makie.lines!(
     plot,
     placebo.time,
     treated_gap;
     color=plot.treated_color,
-    linewidth=plot.treated_linewidth,
+    linewidth=_validated_nonnegative(plot.treated_linewidth, :treated_linewidth),
+    linestyle=plot.treated_linestyle,
+    label=plot.treated_label,
   )
   if plot.show_treatment[]
-    treatment_plot = Makie.vlines!(plot, [placebo.treatment_time]; color=plot.treatment_color, linestyle=plot.treatment_linestyle)
-    labels = ["Treated", "Zero", "Treatment"]
-    plots = Any[treated_plot, zero_plot, treatment_plot]
-  else
-    labels = ["Treated", "Zero"]
-    plots = Any[treated_plot, zero_plot]
+    Makie.vlines!(
+      plot,
+      [placebo.treatment_time];
+      color=plot.treatment_color,
+      linestyle=plot.treatment_linestyle,
+      linewidth=_validated_nonnegative(plot.treatment_linewidth, :treatment_linewidth),
+      label=plot.treatment_label,
+    )
   end
-  if included_plot !== nothing
-    push!(labels, "Included placebos")
-    push!(plots, included_plot)
-  end
-  if excluded_plot !== nothing
-    push!(labels, "Excluded placebos")
-    push!(plots, excluded_plot)
-  end
-  _deduplicated_legend!(_axis(plot), labels, plots; position=plot.legend_position[])
   return plot
 end
 
@@ -302,34 +357,66 @@ end
     placebodistribution(placebo; kwargs...)
     placebodistribution!(axis_or_scene, placebo; kwargs...)
 
-Makie full recipe for post/pre-treatment RMSPE ratios. The default is a
-ranked dot plot because it shows the finite set of randomization units and
-the treated unit's rank without binning.
+Plot post/pre-treatment RMSPE ratios as a ranked dot plot. The treated unit's
+rank and ratio are highlighted with a marker and optional horizontal reference
+line; the randomization p-value can be annotated.
+
+Customize marker, reference-line, text, and label attributes on the recipe.
+Configure axis ticks, labels, titles, and legends through Makie's standard
+APIs.
 """
 Makie.@recipe PlaceboDistribution (placebo,) begin
   "Absolute pre-treatment RMSPE cutoff for placebo inclusion, or `nothing`."
   pre_rmspe_threshold = nothing
   "Color of placebo ratio markers."
   placebo_color = :gray50
-  "Color of the treated-unit ratio marker and line."
+  "Opacity of placebo ratio markers. Must be between 0 and 1."
+  placebo_alpha = 1.0
+  "Marker size for placebo ratio points. Must be non-negative."
+  placebo_markersize = @inherit markersize 10
+  "Marker shape for placebo ratio points."
+  placebo_marker = @inherit marker Circle
+  "Legend label for placebo ratio markers. Use `nothing` to exclude them."
+  placebo_label = "Included placebo ratios"
+  "Color of the treated-unit ratio marker."
   treated_color = :firebrick
-  "Marker size for placebo and treated ratio points."
-  markersize = @inherit markersize 10
-  "Line width of the treated-ratio reference line."
+  "Opacity of the treated-unit ratio marker. Must be between 0 and 1."
+  treated_alpha = 1.0
+  "Marker size for the treated-unit ratio point. Must be non-negative."
+  treated_markersize = @inherit markersize 12.5
+  "Marker shape for the treated-unit ratio point."
+  treated_marker = @inherit marker Circle
+  "Legend label for the treated-unit ratio marker. Use `nothing` to exclude it."
+  treated_label = "Treated ratio"
+  "Color of the treated-ratio reference line."
+  treated_line_color = :firebrick
+  "Line width of the treated-ratio reference line. Must be non-negative."
   treated_linewidth = 2
+  "Line style of the treated-ratio reference line."
+  treated_linestyle = :dash
+  "Legend label for the treated-ratio reference line. Use `nothing` to exclude it."
+  treated_line_label = "Treated ratio line"
+  "Whether to draw the treated-ratio reference line."
+  show_treated_line = true
   "Whether to annotate the randomization p-value."
   show_p_value = true
   "Text prefix for p-value annotation."
   p_value_label = "p = "
-  "X-axis label."
-  xlabel = "Rank"
-  "Y-axis label."
-  ylabel = "Post/pre RMSPE ratio"
-  "Axis title."
-  title = "Placebo RMSPE ratios"
-  "Legend position, or `nothing` to skip creating a legend."
-  legend_position = :rt
+  "Color of the p-value annotation."
+  p_value_color = :firebrick
+  "Font size of the p-value annotation."
+  p_value_fontsize = @inherit fontsize 16
+  "Text alignment of the p-value annotation."
+  p_value_align = (:left, :bottom)
 end
+
+Makie.preferred_axis_type(::PlaceboDistribution) = Makie.Axis
+Makie.preferred_axis_attributes(::Type{<:Makie.Axis}, ::PlaceboDistribution) = (;
+  xlabel="Rank",
+  ylabel="Post/pre RMSPE ratio",
+  title="Placebo RMSPE ratios",
+)
+Makie.get_plots(plot::Union{PathPlot,GapPlot,PlaceboPlot,PlaceboDistribution}) = plot.plots
 
 function Makie.plot!(plot::PlaceboDistribution)
   placebo = plot.placebo[]
@@ -338,45 +425,49 @@ function Makie.plot!(plot::PlaceboDistribution)
   included_ratios = sort(ratios[included])
   isempty(included_ratios) && throw(ArgumentError("no placebo units remain after filtering"))
   p_value = SyntheticControl.randomization_p_value(placebo; pre_rmspe_threshold=plot.pre_rmspe_threshold[])
-  _set_axis_labels!(plot, plot.xlabel[], plot.ylabel[], plot.title[])
-  placebo_scatter = Makie.scatter!(
+
+  Makie.scatter!(
     plot,
     collect(eachindex(included_ratios)),
     included_ratios;
-    color=plot.placebo_color,
-    markersize=plot.markersize,
+    color=_color_with_alpha(plot.placebo_color, plot.placebo_alpha, :placebo_alpha),
+    markersize=_validated_nonnegative(plot.placebo_markersize, :placebo_markersize),
+    marker=plot.placebo_marker,
+    label=plot.placebo_label,
   )
   treated_rank = 1 + count(<(treated_ratio), included_ratios)
-  treated_scatter = Makie.scatter!(
+  Makie.scatter!(
     plot,
     [treated_rank],
     [treated_ratio];
-    color=plot.treated_color,
-    markersize=1.25 * plot.markersize[],
+    color=_color_with_alpha(plot.treated_color, plot.treated_alpha, :treated_alpha),
+    markersize=_validated_nonnegative(plot.treated_markersize, :treated_markersize),
+    marker=plot.treated_marker,
+    label=plot.treated_label,
   )
-  treated_line = Makie.hlines!(
-    plot,
-    [treated_ratio];
-    color=plot.treated_color,
-    linewidth=plot.treated_linewidth,
-    linestyle=:dash,
-  )
+  if plot.show_treated_line[]
+    Makie.hlines!(
+      plot,
+      [treated_ratio];
+      color=plot.treated_line_color,
+      linewidth=_validated_nonnegative(plot.treated_linewidth, :treated_linewidth),
+      linestyle=plot.treated_linestyle,
+      label=plot.treated_line_label,
+    )
+  end
   if plot.show_p_value[]
     Makie.text!(
       plot,
       [1],
       [treated_ratio];
-      text=["$(plot.p_value_label[])$(round(p_value; digits=3))"],
-      color=plot.treated_color,
-      align=(:left, :bottom),
+      text=Makie.lift(plot.p_value_label) do label
+        return ["$(label)$(round(p_value; digits=3))"]
+      end,
+      color=plot.p_value_color,
+      fontsize=_validated_nonnegative(plot.p_value_fontsize, :p_value_fontsize),
+      align=plot.p_value_align,
     )
   end
-  _deduplicated_legend!(
-    _axis(plot),
-    ["Included placebo ratios", "Treated ratio", "Treated ratio line"],
-    [placebo_scatter, treated_scatter, treated_line];
-    position=plot.legend_position[],
-  )
   return plot
 end
 

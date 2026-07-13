@@ -48,21 +48,136 @@ julia> length(outcome_gap(paths))
 5
 ```
 
-Create a standalone path plot:
+Create a standalone path plot. Non-mutating calls accept Makie's standard
+`axis=(; ...)` keyword for axis titles, labels, ticks, limits, and scales:
 
 ```julia
-fig_axis_plot = pathplot(paths; actual_color=:black, synthetic_color=:dodgerblue3)
+fig_axis_plot = pathplot(
+    paths;
+    actual_color=:black,
+    synthetic_color=:dodgerblue3,
+    axis=(; title="Observed and synthetic paths", xlabel="Year", ylabel="Outcome"),
+)
 ```
 
 Compose plots into a user-defined layout:
 
 ```julia
 fig = Figure(size=(900, 700))
-ax_path = Axis(fig[1, 1])
-ax_gap = Axis(fig[2, 1])
-pathplot!(ax_path, paths)
-gapplot!(ax_gap, paths; gap_color=:firebrick)
+ax_path = Axis(fig[1, 1]; title="Observed and synthetic paths")
+ax_gap = Axis(fig[2, 1]; title="Treatment-effect gap", xlabel="Year", ylabel="Gap")
+pathplot!(ax_path, paths; actual_label="Observed", synthetic_label="Synthetic")
+axislegend(ax_path; position=:lt)
+gapplot!(ax_gap, paths; gap_color=:firebrick, gap_linewidth=3)
 fig
+```
+
+## Customization
+
+Recipe attributes control plotted elements only: colors, line widths, line
+styles, marker appearance, transparency, labels, and visibility of optional
+reference lines. Axis attributes belong on `Axis` or the non-mutating
+`axis=(; ...)` keyword. Legend placement and styling belong to `axislegend` or
+`Legend`.
+
+Customize colors, line widths, and line styles independently:
+
+```julia
+fig = Figure(size=(900, 700))
+
+ax1 = Axis(
+    fig[1, 1];
+    title="Observed and synthetic paths",
+    xticks=2000:2:2020,
+)
+
+pathplot!(
+    ax1,
+    paths;
+    actual_color=:black,
+    actual_linewidth=3,
+    actual_label="Observed",
+    synthetic_color=:dodgerblue,
+    synthetic_linewidth=2,
+    synthetic_linestyle=:dash,
+    synthetic_label="Synthetic",
+)
+
+axislegend(ax1; position=:lt)
+
+ax2 = Axis(
+    fig[2, 1];
+    title="Estimated treatment effect",
+    xlabel="Year",
+    ylabel="Gap",
+)
+
+gapplot!(
+    ax2,
+    paths;
+    gap_color=:firebrick,
+    gap_linewidth=3,
+)
+
+fig
+```
+
+Use `nothing` as a label to exclude an element from legends, then configure
+the legend with Makie's normal API:
+
+```julia
+fig = Figure()
+ax = Axis(fig[1, 1]; title="Counterfactual path")
+pathplot!(
+    ax,
+    paths;
+    actual_label="Observed",
+    synthetic_label="Counterfactual",
+    treatment_label=nothing,
+)
+axislegend(ax; position=:lt, orientation=:horizontal)
+fig
+```
+
+Axis ticks and tick labels are standard `Axis` settings:
+
+```julia
+fig = Figure()
+ax = Axis(
+    fig[1, 1];
+    title="Treatment effect",
+    xlabel="Year",
+    ylabel="Gap",
+    xticks=(2001:2005, string.(2001:2005)),
+    yticks=-2:2:6,
+)
+gapplot!(ax, paths)
+fig
+```
+
+The recipes can be composed in the same `Figure`:
+
+```julia
+fig = Figure(size=(1000, 800))
+pathplot!(Axis(fig[1, 1]; title="Paths"), paths)
+gapplot!(Axis(fig[2, 1]; title="Gap"), paths; gap_color=:firebrick)
+placeboplot!(Axis(fig[1, 2]; title="Placebo gaps"), placebo; pre_rmspe_threshold=5.0)
+placebodistribution!(
+    Axis(fig[2, 2]; title="Placebo ratios"),
+    placebo;
+    pre_rmspe_threshold=5.0,
+    treated_color=:firebrick,
+)
+fig
+```
+
+Theme settings are inherited where they match Makie-wide attributes such as
+`linewidth` and `markersize`:
+
+```julia
+with_theme(Theme(linewidth=3, markersize=14, Axis=(; xgridvisible=false))) do
+    pathplot(paths; axis=(; title="Themed path plot"))
+end
 ```
 
 ## Placebo Diagnostics
@@ -106,8 +221,12 @@ RMSPE ratios:
 
 ```julia
 fig = Figure(size=(1000, 800))
-placeboplot!(Axis(fig[1, 1]), placebo; pre_rmspe_threshold=5.0)
-placebodistribution!(Axis(fig[1, 2]), placebo; pre_rmspe_threshold=5.0)
+ax_placebo = Axis(fig[1, 1]; title="Treated and placebo gaps")
+ax_distribution = Axis(fig[1, 2]; title="Placebo RMSPE ratios")
+placeboplot!(ax_placebo, placebo; pre_rmspe_threshold=5.0, treated_label="Treated")
+placebodistribution!(ax_distribution, placebo; pre_rmspe_threshold=5.0)
+axislegend(ax_placebo; position=:lt)
+axislegend(ax_distribution; position=:rt)
 fig
 ```
 
@@ -150,4 +269,3 @@ threshold is supplied. If pre-treatment RMSPE is zero, the ratio is `1` when
 post-treatment RMSPE is also zero and `Inf` otherwise; non-finite placebo
 ratios are excluded. Placebo-based p-values depend on the available donor
 pool and are not conventional parametric p-values.
-

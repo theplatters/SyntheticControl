@@ -3,6 +3,8 @@ using SyntheticControl
 using LinearAlgebra
 using CommonSolve
 using Random
+using Dates
+using Tables
 using Optimization
 using OptimizationOptimJL
 using ADTypes
@@ -15,6 +17,7 @@ using Makie
 include("data_generator.jl")
 using .DataGenerator
 include("visualization_tests.jl")
+include("tables_extension_tests.jl")
 
 function ipnewton_inner_solution(prob::Union{SyntheticControl.SyntheticControlData,SyntheticControl.SyntheticControlProblem}, raw_v)
     data = prob isa SyntheticControl.SyntheticControlProblem ? prob.data : prob
