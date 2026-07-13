@@ -80,6 +80,8 @@ end
         @test isdefined(SyntheticControl, :SyntheticControlProblem)
         @test isdefined(SyntheticControl, :SyntheticControlData)
         @test isdefined(SyntheticControl, :SyntheticControlResult)
+        @test isdefined(SyntheticControl, :PenalizedSyntheticControlProblem)
+        @test isdefined(SyntheticControl, :PenalizedSyntheticControlResult)
         @test isdefined(SyntheticControl, :weight_squared_distance)
         @test isdefined(SyntheticControl, :calculate_mspe)
     end
@@ -396,6 +398,92 @@ end
         end
     end
 
+    @testset "Penalized Synthetic Control" begin
+        @testset "Construction and validation" begin
+            X1 = [2.0]
+            Y1 = [20.0, 21.0, 22.0]
+            X0 = reshape([1.0, 4.0, 5.0], 1, 3)
+            Y0 = [10.0 40.0 50.0;
+                  11.0 41.0 51.0;
+                  12.0 42.0 52.0]
+            data = SyntheticControl.SyntheticControlData(
+                X1,
+                Y1,
+                X0,
+                Y0,
+                ["X"],
+                ["D1", "D2", "D3"],
+                "Treated"
+            )
+            prob = SyntheticControl.PenalizedSyntheticControlProblem(data; lambda=1.0)
+            @test prob isa SyntheticControl.PenalizedSyntheticControlProblem{Float64}
+            @test prob.data === data
+            @test prob.X1 == X1
+            @test prob.lambda == 1.0
+            @test_throws ArgumentError SyntheticControl.PenalizedSyntheticControlProblem(data; lambda=-1.0)
+        end
+
+        @testset "One-dimensional paper example" begin
+            X1 = [2.0]
+            Y1 = [20.0, 21.0, 22.0]
+            X0 = reshape([1.0, 4.0, 5.0], 1, 3)
+            Y0 = [10.0 40.0 50.0;
+                  11.0 41.0 51.0;
+                  12.0 42.0 52.0]
+
+            prob = SyntheticControl.PenalizedSyntheticControlProblem(
+                X1,
+                Y1,
+                X0,
+                Y0,
+                ["X"],
+                ["D1", "D2", "D3"],
+                "Treated";
+                lambda=1.0
+            )
+            res = CommonSolve.solve(prob)
+            @test res isa SyntheticControl.PenalizedSyntheticControlResult{Float64}
+            assert_simplex_weights(res.W; atol=1e-8)
+            @test res.W ≈ [5 / 6, 1 / 6, 0.0] atol=1e-5
+            @test res.predictor_loss + prob.lambda * res.penalty ≈ res.objective
+            @test isfinite(res.mspe)
+
+            nearest_prob = SyntheticControl.PenalizedSyntheticControlProblem(
+                X1,
+                Y1,
+                X0,
+                Y0,
+                ["X"],
+                ["D1", "D2", "D3"],
+                "Treated";
+                lambda=3.0
+            )
+            nearest_res = CommonSolve.solve(nearest_prob)
+            assert_simplex_weights(nearest_res.W; atol=1e-8)
+            @test nearest_res.W ≈ [1.0, 0.0, 0.0] atol=1e-5
+        end
+
+        @testset "Generated local-match fixture" begin
+            prob, nearest_donor = DataGenerator.generate_penalized_synthetic_data(lambda=25.0, seed=11)
+            res = CommonSolve.solve(prob)
+            assert_simplex_weights(res.W; atol=1e-8)
+            @test argmax(res.W) == nearest_donor
+            @test res.W[nearest_donor] > 0.9
+            @test res.mspe < 1e-4
+
+            prob_f32, nearest_donor_f32 = DataGenerator.generate_penalized_synthetic_data(
+                T=Float32,
+                lambda=Float32(25),
+                seed=11
+            )
+            res_f32 = CommonSolve.solve(prob_f32)
+            @test res_f32 isa SyntheticControl.PenalizedSyntheticControlResult{Float32}
+            assert_simplex_weights(res_f32.W; atol=1f-4)
+            @test argmax(res_f32.W) == nearest_donor_f32
+            @test res_f32.W[nearest_donor_f32] > 0.9f0
+        end
+    end
+
     # 7. Data Generator Pipeline Tests
     @testset "Data Generator Pipeline" begin
         # Default construction
@@ -444,5 +532,13 @@ end
         # Different seed gives different weights
         _, true_W3 = DataGenerator.generate_synthetic_data(seed=200)
         @test true_W1 != true_W3
+
+        penalized_prob, nearest_donor = DataGenerator.generate_penalized_synthetic_data()
+        @test penalized_prob isa SyntheticControl.PenalizedSyntheticControlProblem{Float64}
+        @test nearest_donor == 1
+        @test size(penalized_prob.X0) == (2, 6)
+        @test length(penalized_prob.Y1) == 8
+        @test all(isfinite, penalized_prob.X0_normalized)
+        @test all(isfinite, penalized_prob.X1_normalized)
     end
 end

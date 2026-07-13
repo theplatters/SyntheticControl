@@ -5,6 +5,7 @@ import CommonSolve: solve
 using Base.Threads: @threads, nthreads
 using Statistics
 export SyntheticControlData, SyntheticControlProblem, SyntheticControlResult
+export PenalizedSyntheticControlProblem, PenalizedSyntheticControlResult
 export solve
 
 const DEFAULT_MAX_PAIR_STARTS = 0
@@ -65,6 +66,7 @@ struct SyntheticControlData{T<:AbstractFloat}
 end
 
 include("classic_scm.jl")
+include("penalized_scm.jl")
 
 
 end # module SyntheticControl

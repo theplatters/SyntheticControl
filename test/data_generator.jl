@@ -3,7 +3,7 @@ module DataGenerator
 using SyntheticControl
 using Random
 
-export generate_synthetic_data
+export generate_synthetic_data, generate_penalized_synthetic_data
 
 """
     generate_synthetic_data(; K=5, J=10, T_pre=15, noise_level=0.01, seed=42, T=Float64) -> (problem, true_W)
@@ -84,6 +84,57 @@ function generate_synthetic_data(;
     )
 
     return prob, true_W
+end
+
+"""
+    generate_penalized_synthetic_data(; T_pre=8, seed=42, T=Float64, lambda=5) -> (problem, nearest_donor)
+
+Generates a `PenalizedSyntheticControlProblem` with one donor close to the treated unit
+and several farther donors that can interpolate the treated predictors. This setup is
+useful for checking that the pairwise discrepancy penalty favors local matches.
+"""
+function generate_penalized_synthetic_data(;
+        T_pre::Int=8,
+        seed::Int=42,
+        T::Type{<:AbstractFloat}=Float64,
+        lambda::Real=5
+    )
+    rng = Random.MersenneTwister(seed)
+    J = 6
+    K = 2
+
+    X1 = T[0.0, 0.0]
+    X0 = T[
+         0.04  -1.00   1.00   0.00   0.80  -0.80;
+        -0.03   0.15  -0.15   1.00   0.90  -0.90
+    ]
+    nearest_donor = 1
+
+    Y0 = zeros(T, T_pre, J)
+    for j in 1:J
+        level = T(10) + T(2) * X0[1, j] - T(1.5) * X0[2, j] + randn(rng, T) * T(0.01)
+        trend = T(0.25) + T(0.05) * X0[1, j]
+        for t in 1:T_pre
+            Y0[t, j] = level + trend * T(t) + T(0.1) * sin(T(t))
+        end
+    end
+
+    Y1 = copy(Y0[:, nearest_donor])
+    predictor_names = ["Local_x", "Local_y"]
+    donor_ids = ["Near", "Left", "Right", "North", "Northeast", "Southwest"]
+    treated_id = "Treated_Local"
+    problem = SyntheticControl.PenalizedSyntheticControlProblem(
+        X1,
+        Y1,
+        X0,
+        Y0,
+        predictor_names,
+        donor_ids,
+        treated_id;
+        lambda=lambda
+    )
+
+    return problem, nearest_donor
 end
 
 end # module DataGenerator
