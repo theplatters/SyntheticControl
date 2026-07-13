@@ -8,10 +8,13 @@ using OptimizationOptimJL
 using ADTypes
 using DifferentiationInterface
 using ForwardDiff
+using CairoMakie
+using Makie
 
 # Include and use the data generator
 include("data_generator.jl")
 using .DataGenerator
+include("visualization_tests.jl")
 
 function ipnewton_inner_solution(prob::Union{SyntheticControl.SyntheticControlData,SyntheticControl.SyntheticControlProblem}, raw_v)
     data = prob isa SyntheticControl.SyntheticControlProblem ? prob.data : prob
@@ -82,6 +85,8 @@ end
         @test isdefined(SyntheticControl, :SyntheticControlResult)
         @test isdefined(SyntheticControl, :PenalizedSyntheticControlProblem)
         @test isdefined(SyntheticControl, :PenalizedSyntheticControlResult)
+        @test isdefined(SyntheticControl, :SyntheticControlPathData)
+        @test isdefined(SyntheticControl, :SyntheticControlPlaceboResult)
         @test isdefined(SyntheticControl, :weight_squared_distance)
         @test isdefined(SyntheticControl, :calculate_mspe)
     end
@@ -541,4 +546,6 @@ end
         @test all(isfinite, penalized_prob.X0_normalized)
         @test all(isfinite, penalized_prob.X1_normalized)
     end
+
+    visualization_tests()
 end

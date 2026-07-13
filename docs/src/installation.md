@@ -26,3 +26,12 @@ julia --project=docs docs/make.jl
 
 The generated static site is written to `docs/build/`.
 
+For local preview, serve the generated site over HTTP:
+
+```bash
+julia --project=docs docs/serve.jl
+```
+
+Then open `http://127.0.0.1:8000/`. Prefer this over opening
+`docs/build/index.html` directly, because some browsers restrict Documenter
+runtime assets under `file://` URLs.

@@ -2,14 +2,17 @@ using Documenter
 
 push!(LOAD_PATH, joinpath(@__DIR__, ".."))
 
+using CairoMakie
 using SyntheticControl
 using CommonSolve
 using LinearAlgebra
 
+CairoMakie.activate!()
+
 DocMeta.setdocmeta!(
   SyntheticControl,
   :DocTestSetup,
-  :(using SyntheticControl, CommonSolve, LinearAlgebra);
+  :(using SyntheticControl, CommonSolve, LinearAlgebra, CairoMakie);
   recursive=true,
 )
 
@@ -28,6 +31,7 @@ makedocs(
     "End-to-End Example" => "example.md",
     "Solver Configuration" => "solver_configuration.md",
     "Interpreting Results" => "interpreting_results.md",
+    "Visualization" => "visualization.md",
     "API Reference" => "api.md",
     "Implementation Details" => "internals.md",
   ],

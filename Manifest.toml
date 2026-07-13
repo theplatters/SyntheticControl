@@ -2,7 +2,7 @@
 
 julia_version = "1.12.6"
 manifest_format = "2.0"
-project_hash = "9e2d15696e6ba0919690e0261e7503c87014e53a"
+project_hash = "d006ddf14b9c9616e0106e98ca174ca29c987844"
 
 [[deps.Artifacts]]
 uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
@@ -55,6 +55,12 @@ deps = ["CommonSolve", "LinearAlgebra", "Statistics"]
 path = "."
 uuid = "c8772b0c-95db-443c-b035-d9ea080c790c"
 version = "0.1.0"
+
+    [deps.SyntheticControl.extensions]
+    SyntheticControlMakieExt = "Makie"
+
+    [deps.SyntheticControl.weakdeps]
+    Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 
 [[deps.libblastrampoline_jll]]
 deps = ["Artifacts", "Libdl"]

@@ -6,6 +6,12 @@ using Base.Threads: @threads, nthreads
 using Statistics
 export SyntheticControlData, SyntheticControlProblem, SyntheticControlResult
 export PenalizedSyntheticControlProblem, PenalizedSyntheticControlResult
+export SyntheticControlPathData, SyntheticControlPlaceboResult
+export actual_outcome, synthetic_outcome, outcome_gap, placebo_gaps
+export pre_treatment_rmspe, post_treatment_rmspe, rmspe_ratio
+export placebo_rmspe_ratios, filter_placebos, randomization_p_value
+export pathplot, pathplot!, gapplot, gapplot!, placeboplot, placeboplot!
+export placebodistribution, placebodistribution!
 export solve
 
 const DEFAULT_MAX_PAIR_STARTS = 0
@@ -98,6 +104,7 @@ end
 
 include("classic_scm.jl")
 include("penalized_scm.jl")
+include("visualization.jl")
 
 
 end # module SyntheticControl

@@ -39,6 +39,6 @@ true
 - [End-to-End Example](@ref)
 - [Solver Configuration](@ref)
 - [Interpreting Results](@ref)
+- [Visualization](@ref)
 - [API Reference](@ref)
 - [Implementation Details](@ref)
-
