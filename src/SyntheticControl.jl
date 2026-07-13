@@ -7,12 +7,17 @@ using Statistics
 export SyntheticControlData, SyntheticControlProblem, SyntheticControlResult
 export PenalizedSyntheticControlProblem, PenalizedSyntheticControlResult
 export SyntheticControlPathData, SyntheticControlPlaceboResult
+export SyntheticControlPanelData, RobustnessRefit
+export InSpacePlaceboResult, LeaveOneOutResult, InTimePlaceboResult
 export actual_outcome, synthetic_outcome, outcome_gap, placebo_gaps
 export pre_treatment_rmspe, post_treatment_rmspe, rmspe_ratio
 export placebo_rmspe_ratios, filter_placebos, randomization_p_value
+export in_space_placebos, leave_one_out, in_time_placebos, robustness_counts
 export pathplot, pathplot!, gapplot, gapplot!, placeboplot, placeboplot!
 export placebodistribution, placebodistribution!
+export leaveoneoutplot, leaveoneoutplot!, intimeplaceboplot, intimeplaceboplot!
 export from_table, weights_table, balance_table, path_table
+export placebo_summary, leave_one_out_summary, in_time_summary
 export solve
 
 const DEFAULT_MAX_PAIR_STARTS = 0
@@ -106,6 +111,7 @@ end
 include("classic_scm.jl")
 include("penalized_scm.jl")
 include("visualization.jl")
+include("robustness.jl")
 
 """
     from_table(table; unit, time, outcome, predictors, treated, treatment_time, kwargs...)
@@ -189,6 +195,57 @@ isdefined(SyntheticControl, :path_table)
 """
 function path_table(args...; kwargs...)
   throw(ArgumentError("path_table requires loading Tables.jl: run `using SyntheticControl, Tables`"))
+end
+
+"""
+    placebo_summary(result::InSpacePlaceboResult)
+
+Return the stable Tables.jl summary for an in-space placebo result after
+loading Tables.jl. The fallback throws when the Tables extension is absent.
+
+# Examples
+
+```julia
+using SyntheticControl
+isdefined(SyntheticControl, :placebo_summary)
+```
+"""
+function placebo_summary(args...; kwargs...)
+  throw(ArgumentError("placebo_summary requires loading Tables.jl: run `using SyntheticControl, Tables`"))
+end
+
+"""
+    leave_one_out_summary(result::LeaveOneOutResult)
+
+Return the stable Tables.jl leave-one-out summary after loading Tables.jl.
+The fallback throws when the Tables extension is absent.
+
+# Examples
+
+```julia
+using SyntheticControl
+isdefined(SyntheticControl, :leave_one_out_summary)
+```
+"""
+function leave_one_out_summary(args...; kwargs...)
+  throw(ArgumentError("leave_one_out_summary requires loading Tables.jl: run `using SyntheticControl, Tables`"))
+end
+
+"""
+    in_time_summary(result::InTimePlaceboResult)
+
+Return the stable Tables.jl in-time placebo summary after loading Tables.jl.
+The fallback throws when the Tables extension is absent.
+
+# Examples
+
+```julia
+using SyntheticControl
+isdefined(SyntheticControl, :in_time_summary)
+```
+"""
+function in_time_summary(args...; kwargs...)
+  throw(ArgumentError("in_time_summary requires loading Tables.jl: run `using SyntheticControl, Tables`"))
 end
 
 

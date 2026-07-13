@@ -59,7 +59,8 @@ function _ordered_values(values, label::AbstractString)
   catch err
     throw(ArgumentError("$label values must support deterministic ordering with isless"))
   end
-  return ordered
+  value_type = Base.promote_typeof(ordered...)
+  return value_type[ordered...]
 end
 
 function _time_less(a, b)
@@ -154,10 +155,19 @@ function _panel_arrays(table; unit, time, outcome, predictors, treated, treatmen
   Y0 = Matrix{T}(undef, T_pre, J)
   actual = Vector{T}(undef, T_all)
   donor_outcomes = Matrix{T}(undef, T_all, J)
+  all_outcomes = Matrix{T}(undef, T_all, length(ordered_units))
+  all_predictors = Array{T,3}(undef, T_all, K, length(ordered_units))
 
   for (time_index, time_value) in pairs(ordered_times)
     treated_outcome, _ = observations[(treated, time_value)]
     actual[time_index] = T(treated_outcome)
+    for (unit_index, unit_value) in pairs(ordered_units)
+      unit_outcome, unit_predictors = observations[(unit_value, time_value)]
+      all_outcomes[time_index, unit_index] = T(unit_outcome)
+      for predictor_index in 1:K
+        all_predictors[time_index, predictor_index, unit_index] = T(unit_predictors[predictor_index])
+      end
+    end
     for (donor_index, donor) in pairs(donors)
       donor_outcome, _ = observations[(donor, time_value)]
       donor_outcomes[time_index, donor_index] = T(donor_outcome)
@@ -192,8 +202,17 @@ function _panel_arrays(table; unit, time, outcome, predictors, treated, treatmen
   treatment_index = findfirst(==(treatment_time), ordered_times)::Int
   predictor_names = String.(predictor_cols)
   donor_ids = _string_ids(donors)
+  panel = SyntheticControl.SyntheticControlPanelData(
+    ordered_times,
+    treatment_time,
+    ordered_units,
+    treated,
+    all_outcomes,
+    all_predictors,
+    predictor_names
+  )
   return X1, Y1, X0, Y0, predictor_names, donor_ids, string(treated),
-         PanelMetadata(ordered_times, treatment_time, treatment_index, actual, donor_outcomes)
+         PanelMetadata(ordered_times, treatment_time, treatment_index, actual, donor_outcomes), panel
 end
 
 """
@@ -234,7 +253,7 @@ function SyntheticControl.from_table(
   treatment_time,
   kwargs...
 )
-  X1, Y1, X0, Y0, predictor_names, donor_ids, treated_id, metadata = _panel_arrays(
+  X1, Y1, X0, Y0, predictor_names, donor_ids, treated_id, metadata, panel = _panel_arrays(
     table;
     unit=unit,
     time=time,
@@ -254,6 +273,7 @@ function SyntheticControl.from_table(
     kwargs...
   )
   PANEL_METADATA[problem.data] = metadata
+  SyntheticControl._register_panel_data!(problem.data, panel)
   return problem
 end
 
@@ -352,6 +372,100 @@ function SyntheticControl.path_table(problem, result::ResultLike)
     synthetic=synthetic,
     gap=actual .- synthetic,
     post_treatment=post_treatment,
+  )
+end
+
+"""
+    SyntheticControl.placebo_summary(result::InSpacePlaceboResult)
+
+Return one row for the treated unit followed by one row per attempted
+in-space assignment. The stable schema is `unit, is_treated, pre_rmspe,
+post_rmspe, rmspe_ratio, included, exclusion_reason, solver_status`.
+
+# Examples
+
+```julia
+using SyntheticControl, Tables
+Tables.columnnames((unit=String[], is_treated=Bool[], pre_rmspe=Float64[],
+                    post_rmspe=Float64[], rmspe_ratio=Float64[], included=Bool[],
+                    exclusion_reason=Union{Missing,String}[], solver_status=Symbol[]))
+```
+"""
+function SyntheticControl.placebo_summary(result::SyntheticControl.InSpacePlaceboResult{T}) where {T}
+  rows = [result.treated; result.refits]
+  return (
+    unit=[row.assignment for row in rows],
+    is_treated=[index == 1 for index in eachindex(rows)],
+    pre_rmspe=T[row.pre_rmspe for row in rows],
+    post_rmspe=T[row.post_rmspe for row in rows],
+    rmspe_ratio=T[row.rmspe_ratio for row in rows],
+    included=[index == 1 ? isfinite(row.rmspe_ratio) : row.included for (index, row) in pairs(rows)],
+    exclusion_reason=Union{Missing,String}[
+      row.exclusion_reason === nothing ? missing : String(row.exclusion_reason) for row in rows
+    ],
+    solver_status=Symbol[row.solver_status for row in rows],
+  )
+end
+
+"""
+    SyntheticControl.leave_one_out_summary(result::LeaveOneOutResult)
+
+Return the stable leave-one-out schema `omitted_donor, original_weight,
+pre_rmspe, post_rmspe, rmspe_ratio, mean_post_gap, cumulative_post_gap,
+max_path_deviation, solver_status`.
+
+# Examples
+
+```julia
+using SyntheticControl, Tables
+isdefined(SyntheticControl, :leave_one_out_summary)
+```
+"""
+function SyntheticControl.leave_one_out_summary(result::SyntheticControl.LeaveOneOutResult{T}) where {T}
+  panel_donors = [unit for (index, unit) in pairs(result.panel.unit_ids) if index != result.panel.treated_index]
+  weights = T[]
+  for refit in result.refits
+    position = findfirst(isequal(refit.assignment), panel_donors)
+    push!(weights, result.original.W[position])
+  end
+  return (
+    omitted_donor=[refit.assignment for refit in result.refits],
+    original_weight=weights,
+    pre_rmspe=T[refit.pre_rmspe for refit in result.refits],
+    post_rmspe=T[refit.post_rmspe for refit in result.refits],
+    rmspe_ratio=T[refit.rmspe_ratio for refit in result.refits],
+    mean_post_gap=T[refit.mean_post_gap for refit in result.refits],
+    cumulative_post_gap=T[refit.cumulative_post_gap for refit in result.refits],
+    max_path_deviation=T[refit.max_path_deviation for refit in result.refits],
+    solver_status=Symbol[refit.solver_status for refit in result.refits],
+  )
+end
+
+"""
+    SyntheticControl.in_time_summary(result::InTimePlaceboResult)
+
+Return the stable in-time schema `placebo_time, pre_rmspe, post_rmspe,
+rmspe_ratio, mean_post_gap, cumulative_post_gap, pre_periods, post_periods,
+solver_status`. Period columns contain observation counts.
+
+# Examples
+
+```julia
+using SyntheticControl, Tables
+isdefined(SyntheticControl, :in_time_summary)
+```
+"""
+function SyntheticControl.in_time_summary(result::SyntheticControl.InTimePlaceboResult{T}) where {T}
+  return (
+    placebo_time=[refit.assignment for refit in result.refits],
+    pre_rmspe=T[refit.pre_rmspe for refit in result.refits],
+    post_rmspe=T[refit.post_rmspe for refit in result.refits],
+    rmspe_ratio=T[refit.rmspe_ratio for refit in result.refits],
+    mean_post_gap=T[refit.mean_post_gap for refit in result.refits],
+    cumulative_post_gap=T[refit.cumulative_post_gap for refit in result.refits],
+    pre_periods=Int[max(refit.treatment_index - 1, 0) for refit in result.refits],
+    post_periods=Int[isempty(refit.time) ? 0 : length(refit.time) - refit.treatment_index + 1 for refit in result.refits],
+    solver_status=Symbol[refit.solver_status for refit in result.refits],
   )
 end
 

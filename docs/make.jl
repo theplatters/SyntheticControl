@@ -14,6 +14,10 @@ if Base.get_extension(SyntheticControl, :SyntheticControlTablesExt) === nothing
   include(joinpath(@__DIR__, "..", "ext", "SyntheticControlTablesExt.jl"))
 end
 
+if Base.get_extension(SyntheticControl, :SyntheticControlMakieExt) === nothing
+  include(joinpath(@__DIR__, "..", "ext", "SyntheticControlMakieExt.jl"))
+end
+
 DocMeta.setdocmeta!(
   SyntheticControl,
   :DocTestSetup,
@@ -36,6 +40,7 @@ makedocs(
     "End-to-End Example" => "example.md",
     "Solver Configuration" => "solver_configuration.md",
     "Interpreting Results" => "interpreting_results.md",
+    "Robustness and Placebo Inference" => "robustness.md",
     "Tables Integration" => "tables.md",
     "Visualization" => "visualization.md",
     "API Reference" => "api.md",

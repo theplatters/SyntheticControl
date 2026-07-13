@@ -105,6 +105,9 @@ Stable schemas are:
 | `weights_table` | `donor`, `weight` |
 | `balance_table` | `predictor`, `treated`, `synthetic`, `difference` |
 | `path_table` | `time`, `actual`, `synthetic`, `gap`, `post_treatment` |
+| `placebo_summary` | `unit`, `is_treated`, `pre_rmspe`, `post_rmspe`, `rmspe_ratio`, `included`, `exclusion_reason`, `solver_status` |
+| `leave_one_out_summary` | `omitted_donor`, `original_weight`, `pre_rmspe`, `post_rmspe`, `rmspe_ratio`, `mean_post_gap`, `cumulative_post_gap`, `max_path_deviation`, `solver_status` |
+| `in_time_summary` | `placebo_time`, `pre_rmspe`, `post_rmspe`, `rmspe_ratio`, `mean_post_gap`, `cumulative_post_gap`, `pre_periods`, `post_periods`, `solver_status` |
 
 Use any Tables.jl sink for downstream work:
 
@@ -128,3 +131,9 @@ Tables built from `from_table` retain post-treatment paths for
 [`path_table`](@ref). The Makie visualization helpers can use the same result
 with explicit post-treatment arrays, or you can inspect the tabular path
 directly before plotting.
+
+The same retained panel powers robustness refits. Robustness summary tables
+contain one row per attempted assignment, including failed or filtered
+assignments; numeric statistics are `NaN` for failed fits and
+`solver_status == :failed` identifies them. `exclusion_reason` distinguishes
+poor-fit, non-finite-ratio, and failed in-space assignments.

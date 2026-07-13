@@ -269,3 +269,23 @@ threshold is supplied. If pre-treatment RMSPE is zero, the ratio is `1` when
 post-treatment RMSPE is also zero and `Inf` otherwise; non-finite placebo
 ratios are excluded. Placebo-based p-values depend on the available donor
 pool and are not conventional parametric p-values.
+
+## Robustness Results
+
+The placebo recipes also accept [`InSpacePlaceboResult`](@ref), using its
+stored relative RMSPE cutoff. [`leaveoneoutplot`](@ref) overlays the original
+synthetic path and successful donor-omission paths, while
+[`intimeplaceboplot`](@ref) draws stored in-time gap paths and pseudo-date
+markers. All three adapters consume stored results and never trigger refits.
+
+```julia
+placeboplot(in_space_result)
+placebodistribution(in_space_result)
+leaveoneoutplot(leave_one_out_result)
+intimeplaceboplot(in_time_result)
+```
+
+Their mutating forms compose into existing axes and preserve user axis
+settings. Colors, line widths, styles, opacity, labels, and visibility are
+recipe attributes; ticks, limits, scales, titles, and legends remain standard
+Makie configuration.

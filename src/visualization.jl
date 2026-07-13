@@ -669,3 +669,74 @@ method. See [`placebodistribution`](@ref) for recipe attributes. This method
 preserves user-provided axis settings.
 """
 placebodistribution!(args...; kwargs...) = _makie_extension_error(:placebodistribution!)
+
+"""
+    leaveoneoutplot(result::LeaveOneOutResult; kwargs...)
+    leaveoneoutplot!(axis_or_scene, result::LeaveOneOutResult; kwargs...)
+
+Makie recipe for the original synthetic path and every successful
+leave-one-out refit. Load a Makie backend before calling it. Recipe attributes
+are `original_color`, `original_linewidth`, `original_linestyle`,
+`original_label`, `refit_color`, `refit_alpha`, `refit_linewidth`,
+`refit_linestyle`, `refit_label`, `show_refits`, `treatment_color`,
+`treatment_linewidth`, `treatment_linestyle`, `treatment_label`, and
+`show_treatment`. Axis and legend configuration use standard Makie APIs.
+
+# Examples
+
+```julia
+using SyntheticControl
+isdefined(SyntheticControl, :leaveoneoutplot)
+```
+"""
+leaveoneoutplot(args...; kwargs...) = _makie_extension_error(:leaveoneoutplot)
+
+"""
+    leaveoneoutplot!(axis_or_scene, result::LeaveOneOutResult; kwargs...)
+
+Mutating form of [`leaveoneoutplot`](@ref). It adds stored paths without
+refitting and preserves existing axis configuration.
+
+# Examples
+
+```julia
+using SyntheticControl
+isdefined(SyntheticControl, :leaveoneoutplot!)
+```
+"""
+leaveoneoutplot!(args...; kwargs...) = _makie_extension_error(:leaveoneoutplot!)
+
+"""
+    intimeplaceboplot(result::InTimePlaceboResult; kwargs...)
+    intimeplaceboplot!(axis_or_scene, result::InTimePlaceboResult; kwargs...)
+
+Makie recipe for successful in-time placebo gap paths and their
+pseudo-treatment markers. Attributes are `gap_color`, `gap_alpha`,
+`gap_linewidth`, `gap_linestyle`, `gap_label`, `show_gaps`, `zero_color`,
+`zero_linewidth`, `zero_linestyle`, `zero_label`, `show_zero`,
+`placebo_time_color`, `placebo_time_linewidth`, `placebo_time_linestyle`,
+`placebo_time_label`, and `show_placebo_times`.
+
+# Examples
+
+```julia
+using SyntheticControl
+isdefined(SyntheticControl, :intimeplaceboplot)
+```
+"""
+intimeplaceboplot(args...; kwargs...) = _makie_extension_error(:intimeplaceboplot)
+
+"""
+    intimeplaceboplot!(axis_or_scene, result::InTimePlaceboResult; kwargs...)
+
+Mutating form of [`intimeplaceboplot`](@ref). It consumes stored refits only
+and leaves axis titles, ticks, limits, and scales unchanged.
+
+# Examples
+
+```julia
+using SyntheticControl
+isdefined(SyntheticControl, :intimeplaceboplot!)
+```
+"""
+intimeplaceboplot!(args...; kwargs...) = _makie_extension_error(:intimeplaceboplot!)

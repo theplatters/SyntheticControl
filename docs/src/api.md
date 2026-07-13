@@ -14,10 +14,22 @@ CommonSolve.solve(::SyntheticControlProblem)
 CommonSolve.solve(::PenalizedSyntheticControlProblem)
 SyntheticControlPathData
 SyntheticControlPlaceboResult
+SyntheticControlPanelData
+RobustnessRefit
+InSpacePlaceboResult
+LeaveOneOutResult
+InTimePlaceboResult
+in_space_placebos
+leave_one_out
+in_time_placebos
+robustness_counts
 from_table
 weights_table
 balance_table
 path_table
+placebo_summary
+leave_one_out_summary
+in_time_summary
 ```
 
 ## Public Mathematical Helpers
@@ -46,4 +58,8 @@ placeboplot
 placeboplot!
 placebodistribution
 placebodistribution!
+leaveoneoutplot
+leaveoneoutplot!
+intimeplaceboplot
+intimeplaceboplot!
 ```

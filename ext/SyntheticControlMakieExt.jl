@@ -471,6 +471,137 @@ function Makie.plot!(plot::PlaceboDistribution)
   return plot
 end
 
+"""
+    leaveoneoutplot(result::LeaveOneOutResult; kwargs...)
+
+Plot the stored original synthetic path together with successful
+leave-one-out refits. This recipe performs no estimation.
+"""
+Makie.@recipe LeaveOneOutPlot (result,) begin
+  original_color = @inherit color :black
+  original_linewidth = @inherit linewidth 3
+  original_linestyle = nothing
+  original_label = "Original synthetic"
+  refit_color = :steelblue
+  refit_alpha = 0.45
+  refit_linewidth = @inherit linewidth 1.5
+  refit_linestyle = nothing
+  refit_label = "Leave-one-out"
+  show_refits = true
+  treatment_color = :gray40
+  treatment_linewidth = @inherit linewidth 1.5
+  treatment_linestyle = :dash
+  treatment_label = nothing
+  show_treatment = true
+end
+
+Makie.preferred_axis_type(::LeaveOneOutPlot) = Makie.Axis
+Makie.preferred_axis_attributes(::Type{<:Makie.Axis}, ::LeaveOneOutPlot) = (;
+  title="Leave-one-out synthetic paths", xlabel="Time", ylabel="Synthetic outcome"
+)
+
+function Makie.plot!(plot::LeaveOneOutPlot)
+  result = plot.result[]
+  if plot.show_refits[]
+    first_refit = true
+    for refit in result.refits
+      refit.solver_status === :success || continue
+      Makie.lines!(
+        plot, refit.time, refit.synthetic;
+        color=_color_with_alpha(plot.refit_color, plot.refit_alpha, :refit_alpha),
+        linewidth=_validated_nonnegative(plot.refit_linewidth, :refit_linewidth),
+        linestyle=plot.refit_linestyle,
+        label=first_refit ? plot.refit_label : nothing,
+      )
+      first_refit = false
+    end
+  end
+  Makie.lines!(
+    plot, result.original_path.time, result.original_path.synthetic;
+    color=plot.original_color,
+    linewidth=_validated_nonnegative(plot.original_linewidth, :original_linewidth),
+    linestyle=plot.original_linestyle,
+    label=plot.original_label,
+  )
+  if plot.show_treatment[]
+    Makie.vlines!(
+      plot, [result.panel.treatment_time];
+      color=plot.treatment_color,
+      linewidth=_validated_nonnegative(plot.treatment_linewidth, :treatment_linewidth),
+      linestyle=plot.treatment_linestyle,
+      label=plot.treatment_label,
+    )
+  end
+  return plot
+end
+
+"""
+    intimeplaceboplot(result::InTimePlaceboResult; kwargs...)
+
+Plot stored in-time placebo gap paths and pseudo-treatment markers without
+triggering refits.
+"""
+Makie.@recipe InTimePlaceboPlot (result,) begin
+  gap_color = @inherit color :steelblue
+  gap_alpha = 0.65
+  gap_linewidth = @inherit linewidth 2
+  gap_linestyle = nothing
+  gap_label = "In-time placebo gap"
+  show_gaps = true
+  zero_color = :gray50
+  zero_linewidth = @inherit linewidth 1
+  zero_linestyle = :dot
+  zero_label = nothing
+  show_zero = true
+  placebo_time_color = :gray40
+  placebo_time_linewidth = @inherit linewidth 1
+  placebo_time_linestyle = :dash
+  placebo_time_label = "Pseudo-treatment"
+  show_placebo_times = true
+end
+
+Makie.preferred_axis_type(::InTimePlaceboPlot) = Makie.Axis
+Makie.preferred_axis_attributes(::Type{<:Makie.Axis}, ::InTimePlaceboPlot) = (;
+  title="In-time placebo gaps", xlabel="Time", ylabel="Actual - synthetic"
+)
+
+function Makie.plot!(plot::InTimePlaceboPlot)
+  result = plot.result[]
+  if plot.show_zero[]
+    Makie.hlines!(
+      plot, [0.0]; color=plot.zero_color,
+      linewidth=_validated_nonnegative(plot.zero_linewidth, :zero_linewidth),
+      linestyle=plot.zero_linestyle, label=plot.zero_label,
+    )
+  end
+  first_gap = true
+  first_marker = true
+  for refit in result.refits
+    refit.solver_status === :success || continue
+    if plot.show_gaps[]
+      Makie.lines!(
+        plot, refit.time, refit.gap;
+        color=_color_with_alpha(plot.gap_color, plot.gap_alpha, :gap_alpha),
+        linewidth=_validated_nonnegative(plot.gap_linewidth, :gap_linewidth),
+        linestyle=plot.gap_linestyle,
+        label=first_gap ? plot.gap_label : nothing,
+      )
+      first_gap = false
+    end
+    if plot.show_placebo_times[]
+      Makie.vlines!(
+        plot, [refit.assignment];
+        color=plot.placebo_time_color,
+        linewidth=_validated_nonnegative(plot.placebo_time_linewidth, :placebo_time_linewidth),
+        linestyle=plot.placebo_time_linestyle,
+        label=first_marker ? plot.placebo_time_label : nothing,
+      )
+      first_marker = false
+    end
+  end
+  return plot
+end
+
 function SyntheticControl.pathplot(input::PathInput; kwargs...)
   return pathplot(input; kwargs...)
 end
@@ -501,6 +632,50 @@ end
 
 function SyntheticControl.placebodistribution!(axis_or_scene, input::SyntheticControl.SyntheticControlPlaceboResult; kwargs...)
   return placebodistribution!(axis_or_scene, input; kwargs...)
+end
+
+function _in_space_threshold(input::SyntheticControl.InSpacePlaceboResult)
+  return input.rmspe_cutoff === nothing ? nothing : input.rmspe_cutoff * input.treated.pre_rmspe
+end
+
+function SyntheticControl.placeboplot(input::SyntheticControl.InSpacePlaceboResult; kwargs...)
+  prepared = SyntheticControl.SyntheticControlPlaceboResult(input)
+  haskey(kwargs, :pre_rmspe_threshold) && return placeboplot(prepared; kwargs...)
+  return placeboplot(prepared; pre_rmspe_threshold=_in_space_threshold(input), kwargs...)
+end
+
+function SyntheticControl.placeboplot!(axis_or_scene, input::SyntheticControl.InSpacePlaceboResult; kwargs...)
+  prepared = SyntheticControl.SyntheticControlPlaceboResult(input)
+  haskey(kwargs, :pre_rmspe_threshold) && return placeboplot!(axis_or_scene, prepared; kwargs...)
+  return placeboplot!(axis_or_scene, prepared; pre_rmspe_threshold=_in_space_threshold(input), kwargs...)
+end
+
+function SyntheticControl.placebodistribution(input::SyntheticControl.InSpacePlaceboResult; kwargs...)
+  prepared = SyntheticControl.SyntheticControlPlaceboResult(input)
+  haskey(kwargs, :pre_rmspe_threshold) && return placebodistribution(prepared; kwargs...)
+  return placebodistribution(prepared; pre_rmspe_threshold=_in_space_threshold(input), kwargs...)
+end
+
+function SyntheticControl.placebodistribution!(axis_or_scene, input::SyntheticControl.InSpacePlaceboResult; kwargs...)
+  prepared = SyntheticControl.SyntheticControlPlaceboResult(input)
+  haskey(kwargs, :pre_rmspe_threshold) && return placebodistribution!(axis_or_scene, prepared; kwargs...)
+  return placebodistribution!(axis_or_scene, prepared; pre_rmspe_threshold=_in_space_threshold(input), kwargs...)
+end
+
+function SyntheticControl.leaveoneoutplot(input::SyntheticControl.LeaveOneOutResult; kwargs...)
+  return leaveoneoutplot(input; kwargs...)
+end
+
+function SyntheticControl.leaveoneoutplot!(axis_or_scene, input::SyntheticControl.LeaveOneOutResult; kwargs...)
+  return leaveoneoutplot!(axis_or_scene, input; kwargs...)
+end
+
+function SyntheticControl.intimeplaceboplot(input::SyntheticControl.InTimePlaceboResult; kwargs...)
+  return intimeplaceboplot(input; kwargs...)
+end
+
+function SyntheticControl.intimeplaceboplot!(axis_or_scene, input::SyntheticControl.InTimePlaceboResult; kwargs...)
+  return intimeplaceboplot!(axis_or_scene, input; kwargs...)
 end
 
 end

@@ -6,6 +6,7 @@ This is a Julia package named `SyntheticControl`.
 
 - `src/SyntheticControl.jl`: main package module, public types, solver implementation, and internal optimization caches.
 - `src/visualization.jl`: backend-independent visualization data containers, statistical helpers, and public Makie plotting entry points.
+- `src/robustness.jl`: panel metadata, robustness result types, refitting logic, failure records, RMSPE inference, and public robustness APIs.
 - `ext/SyntheticControlMakieExt.jl`: Makie weak-dependency extension defining full recipes and `Makie.plot!` implementations.
 - `ext/SyntheticControlTablesExt.jl`: Tables.jl weak-dependency extension for long-format panel input and table-shaped result output. It activates only after both `using SyntheticControl` and `using Tables`.
 - `test/runtests.jl`: package test suite using Julia `Test`.
@@ -18,7 +19,10 @@ This is a Julia package named `SyntheticControl`.
 - `test/Project.toml`: additional test-only dependencies, including `Optimization`, `OptimizationOptimJL`, and AD tooling.
 - `docs/Project.toml` and `docs/Manifest.toml`: documentation-only dependencies, including `Documenter`.
 
-Keep source changes concentrated in `src/SyntheticControl.jl` unless adding reusable test fixtures or generated data helpers.
+Keep estimator source changes concentrated in `src/SyntheticControl.jl` and
+the estimator-specific included files. Robustness refitting and inference
+belong in `src/robustness.jl`; visualization statistics remain in
+`src/visualization.jl`.
 
 ## Build, Test, and Development Commands
 
@@ -110,6 +114,33 @@ Visualization changes need tests for both layers: numerical tests for gaps, RMSP
 Recipe customization changes also need tests that every documented recipe attribute is accepted, attributes propagate to the intended child plot, independent styling works for actual, synthetic, treated, placebo, treatment, zero, marker, and distribution elements, `nothing` labels suppress legend entries, `axislegend(ax)` discovers labeled child elements, explicit `Axis` settings are preserved, non-mutating `axis=(; ...)` values work, `with_theme` and observable updates affect inherited or observable-backed attributes, and invalid recipe-specific values fail clearly. Update `docs/src/visualization.md` and recipe docstrings when adding, removing, or renaming public recipe attributes.
 
 Tables extension changes need tests for activation with Tables.jl, named-tuple column tables, row tables, minimal custom Tables.jl sources, single-pass schema-less sources, shuffled input rows, multiple predictors, matrix orientations and values, output schemas, solver integration, non-string identifiers, supported time types, and validation failures. Update `docs/src/tables.md` and run the Documenter build after changing public table behavior or docstrings.
+
+Robustness APIs are `in_space_placebos`, `leave_one_out`, and
+`in_time_placebos`, returning `InSpacePlaceboResult`, `LeaveOneOutResult`, and
+`InTimePlaceboResult`. Full panel storage uses `SyntheticControlPanelData` and
+retains generic identifier and ordered time types. Refits must clone the
+original estimator configuration, own independent solver caches, preserve
+deterministic assignment order, and record rather than discard failures under
+`on_failure=:record`.
+
+The treatment period is the first post-treatment period. RMSPE ratios use
+post/pre RMSPE; `0/0` is `1` and positive/zero is `Inf`. In-space inference
+includes the treated assignment, counts ties with `>=`, and excludes failed,
+filtered, or non-finite placebo ratios. Relative filtering never removes
+stored refits. A placebo is excluded from its own donors, and the original
+treated unit is excluded unless `include_treated=true`. Leave-one-out removes
+exactly one donor and has no p-value. In-time fitting uses only observations
+before the pseudo-date and, by default, evaluation stops before real
+treatment; windows count observed periods rather than calendar distance.
+
+Tables robustness methods are `placebo_summary`, `leave_one_out_summary`, and
+`in_time_summary`. Makie consumes stored results through `placeboplot`,
+`placebodistribution`, `leaveoneoutplot`, and `intimeplaceboplot`; recipes must
+never refit or calculate statistics. Future robustness changes require tests
+for reassignment, donor composition, windows, failures, zero/non-finite RMSPE,
+exact ranks and ties, generic times, table schemas, recipe construction, and
+serial/parallel equivalence. Update `docs/src/robustness.md`, relevant
+docstrings, Tables docs, and visualization docs, then run full tests and docs.
 
 ## Commit & Pull Request Guidelines
 
