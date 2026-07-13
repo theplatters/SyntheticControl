@@ -363,7 +363,9 @@ end
 Solve a penalized synthetic-control problem using the CommonSolve interface.
 
 Returns a `PenalizedSyntheticControlResult`. Mutates the problem's inner cache
-and result object; repeated calls reuse the same allocations.
+and result object; repeated calls reuse the same allocations. The returned
+result is also associated with `prob` so fit-only orchestration APIs can
+preserve its solver configuration.
 
 # Examples
 
@@ -380,5 +382,5 @@ sum(result.W) ≈ 1.0
 function solve(prob::PenalizedSyntheticControlProblem{T}) where {T}
   update_penalized_donor_weight_objective!(prob)
   optimize_donor_weights!(prob.cache)
-  return update_penalized_result!(prob)
+  return _register_solution_problem!(update_penalized_result!(prob), prob)
 end

@@ -84,6 +84,9 @@ julia> Tables.columnnames(weights_table(result))
 julia> Tables.columnnames(balance_table(problem, result))
 (:predictor, :treated, :synthetic, :difference)
 
+julia> Tuple(first(Tables.columnnames(diagnostics_table(result)), 3))
+(:pre_rmspe, :pre_mae, :max_absolute_pre_gap)
+
 julia> path = path_table(problem, result);
 
 julia> Tables.columnnames(path)
@@ -105,9 +108,23 @@ Stable schemas are:
 | `weights_table` | `donor`, `weight` |
 | `balance_table` | `predictor`, `treated`, `synthetic`, `difference` |
 | `path_table` | `time`, `actual`, `synthetic`, `gap`, `post_treatment` |
+| `diagnostics_table` | `pre_rmspe`, `pre_mae`, `max_absolute_pre_gap`, `effective_donor_count`, `largest_donor_weight`, `weight_sum`, `weight_sum_error`, `predictor_mae`, `predictor_max_absolute_imbalance`, `predictor_mean_relative_imbalance`, `predictor_max_relative_imbalance`, `solver`, `solver_success`, `termination_status`, `iteration_count`, `objective_value`, `runtime_seconds`, `objective_evaluations` |
+| `predictor_diagnostics_table` | `predictor`, `treated`, `synthetic`, `difference`, `absolute_difference`, `relative_difference` |
 | `placebo_summary` | `unit`, `is_treated`, `pre_rmspe`, `post_rmspe`, `rmspe_ratio`, `included`, `exclusion_reason`, `solver_status` |
 | `leave_one_out_summary` | `omitted_donor`, `original_weight`, `pre_rmspe`, `post_rmspe`, `rmspe_ratio`, `mean_post_gap`, `cumulative_post_gap`, `max_path_deviation`, `solver_status` |
 | `in_time_summary` | `placebo_time`, `pre_rmspe`, `post_rmspe`, `rmspe_ratio`, `mean_post_gap`, `cumulative_post_gap`, `pre_periods`, `post_periods`, `solver_status` |
+| `placebo_paths` | `analysis_id`, `time`, `actual`, `synthetic`, `gap`, `is_post_treatment`, `included`, `solver_status`, `failure_reason`, `is_treated`, `exclusion_reason` |
+| `leave_one_out_paths` | `analysis_id`, `time`, `actual`, `synthetic`, `gap`, `is_post_treatment`, `included`, `solver_status`, `failure_reason`, `original_weight` |
+| `in_time_paths` | `analysis_id`, `time`, `actual`, `synthetic`, `gap`, `is_post_treatment`, `included`, `solver_status`, `failure_reason` |
+| `pointwise_placebo_summary` | `time`, `statistic`, `alternative`, `treated_statistic`, `extreme_count`, `assignment_count`, `p_value`, `p_value_resolution` |
+| `aggregate_placebo_summary` | `statistic`, `alternative`, `periods`, `period_count`, `treated_statistic`, `extreme_count`, `assignment_count`, `p_value`, `p_value_resolution` |
+| `specification_definitions` | `specification_id`, `pre_periods`, `omitted_predictors`, `predictor_periods`, `donors`, `solver_status`, `included`, `failure_reason` |
+| `specification_diagnostics` | `specification_id`, scalar fit-diagnostic columns, `solver_status`, `included`, `exclusion_reason`, `failure_reason` |
+| `specification_paths` | `specification_id`, `time`, `actual`, `synthetic`, `gap`, `is_post_treatment`, `included`, `solver_status`, `failure_reason` |
+| `specification_weights` | `specification_id`, `donor`, `weight`, `included`, `solver_status`, `failure_reason` |
+| `specification_balance` | `specification_id`, `predictor`, `treated`, `synthetic`, `difference`, `absolute_difference`, `relative_difference`, `predictor_weight`, `included`, `solver_status`, `failure_reason` |
+| `diagnostics_table(suite)` | Same one-row schema as `diagnostics_table(fit)`, read from stored suite diagnostics |
+| `robustness_summary` | `analysis`, `requested`, `status`, `successful`, `failed`, `filtered`, `inference_eligible`, `failure_reason` |
 
 Use any Tables.jl sink for downstream work:
 
@@ -137,3 +154,27 @@ contain one row per attempted assignment, including failed or filtered
 assignments; numeric statistics are `NaN` for failed fits and
 `solver_status == :failed` identifies them. `exclusion_reason` distinguishes
 poor-fit, non-finite-ratio, and failed in-space assignments.
+
+Robustness path tables use complete stored paths for successful assignments,
+including filtered in-space paths. Each failed assignment contributes one
+sentinel row with its native analysis identifier and failure reason; time,
+path, and post-treatment fields are `missing`. Rows are deterministic and
+these reporting functions never trigger estimation.
+
+Time-specific inference summaries consume typed, already-calculated
+inference results. The pointwise table has one row per post-treatment period;
+the aggregate table has one row and stores its native-time evaluation window
+in the typed `periods` cell. `p_value_resolution` is the reciprocal of the
+assignment count. Summary construction never reruns inference.
+
+Specification-sensitivity tables retain input order and native unit/time
+types. Successful tables use stored paths, weights, and diagnostics; each
+failed specification contributes one sentinel row, while scalar diagnostics
+use typed `missing`. Reporting never reconstructs or solves an SCM problem.
+
+Suite summaries always contain four rows in component order: in-space,
+leave-one-out, in-time, and specification sensitivity. Counts are `missing`
+for disabled, skipped, or suite-level failed components. Successful
+components report counts from stored results, including recorded refit
+failures. Specification sensitivity uses `missing` for
+`inference_eligible` because it is not a randomization-inference analysis.

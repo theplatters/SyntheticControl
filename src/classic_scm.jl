@@ -1582,7 +1582,9 @@ Solve a classic synthetic-control problem using the CommonSolve interface.
 
 Returns a `SyntheticControlResult` containing donor weights `W`, predictor
 weights `V`, and pre-treatment `mspe`. Mutates the problem's internal caches
-and result object; repeated calls reuse those allocations.
+and result object; repeated calls reuse those allocations. The returned
+result is also associated with `prob` so fit-only orchestration APIs can
+preserve its solver configuration.
 
 # Examples
 
@@ -1596,5 +1598,5 @@ sum(result.W) ≈ 1.0
 ```
 """
 function solve(prob::SyntheticControlProblem{T}) where {T}
-  return run_outer_search!(prob)
+  return _register_solution_problem!(run_outer_search!(prob), prob)
 end

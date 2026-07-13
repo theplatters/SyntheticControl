@@ -9,15 +9,32 @@ export PenalizedSyntheticControlProblem, PenalizedSyntheticControlResult
 export SyntheticControlPathData, SyntheticControlPlaceboResult
 export SyntheticControlPanelData, RobustnessRefit
 export InSpacePlaceboResult, LeaveOneOutResult, InTimePlaceboResult
+export PointwisePlaceboInferenceResult, AggregatePlaceboInferenceResult
+export SCMSpecification, SpecificationSensitivityRefit, SpecificationSensitivityResult
+export InSpaceOptions, LeaveOneOutOptions, InTimeOptions, SpecificationSensitivityOptions
+export RobustnessAnalysisState, RobustnessSuiteResult
+export FitDiagnostics, PredictorDiagnostics
 export actual_outcome, synthetic_outcome, outcome_gap, placebo_gaps
 export pre_treatment_rmspe, post_treatment_rmspe, rmspe_ratio
 export placebo_rmspe_ratios, filter_placebos, randomization_p_value
 export in_space_placebos, leave_one_out, in_time_placebos, robustness_counts
+export pointwise_placebo_inference, aggregate_placebo_inference
+export specification_sensitivity
+export robustness_suite
+export preperiod_specifications, leave_one_predictor_out
+export aggregation_period_specifications, donor_pool_specifications
 export pathplot, pathplot!, gapplot, gapplot!, placeboplot, placeboplot!
 export placebodistribution, placebodistribution!
 export leaveoneoutplot, leaveoneoutplot!, intimeplaceboplot, intimeplaceboplot!
 export from_table, weights_table, balance_table, path_table
+export fit_diagnostics, predictor_diagnostics
+export diagnostics_table, predictor_diagnostics_table
 export placebo_summary, leave_one_out_summary, in_time_summary
+export placebo_paths, leave_one_out_paths, in_time_paths
+export pointwise_placebo_summary, aggregate_placebo_summary
+export specification_definitions, specification_diagnostics
+export specification_paths, specification_weights, specification_balance
+export robustness_summary
 export solve
 
 const DEFAULT_MAX_PAIR_STARTS = 0
@@ -26,6 +43,47 @@ const DEFAULT_MAX_OUTER_EVALUATIONS = 200
 const DEFAULT_MAX_TRANSFER_DONORS = 4
 const DEFAULT_MAX_TRANSFER_RECEIVERS = 8
 const DEFAULT_MIN_RELATIVE_MSPE_IMPROVEMENT = 0.01
+
+const SOLUTION_PROBLEM_REGISTRY = IdDict{Any,Any}()
+
+"""
+    _register_solution_problem!(solution, problem)
+
+Associate a mutable solver result with the problem that produced it so
+fit-only orchestration APIs can recover estimator configuration. Returns the
+solution and replaces an older association for the same result object.
+
+# Examples
+
+```julia
+isdefined(SyntheticControl, :_register_solution_problem!)
+```
+"""
+function _register_solution_problem!(solution, problem)
+  SOLUTION_PROBLEM_REGISTRY[solution] = problem
+  return solution
+end
+
+"""
+    _problem_for_solution(solution)
+
+Return the registered problem that produced `solution`. Throws
+`ArgumentError` for manually constructed or otherwise unregistered fits;
+callers may then use an explicit `(problem, solution)` API.
+
+# Examples
+
+```julia
+isdefined(SyntheticControl, :_problem_for_solution)
+```
+"""
+function _problem_for_solution(solution)
+  problem = get(SOLUTION_PROBLEM_REGISTRY, solution, nothing)
+  problem === nothing && throw(ArgumentError(
+    "the fit is not associated with a solved problem; call robustness_suite(problem, fit; ...)"
+  ))
+  return problem
+end
 
 """
     SyntheticControlData(X1, Y1, X0, Y0, predictor_names, donor_ids, treated_id)
@@ -111,7 +169,10 @@ end
 include("classic_scm.jl")
 include("penalized_scm.jl")
 include("visualization.jl")
+include("diagnostics.jl")
 include("robustness.jl")
+include("specification.jl")
+include("suite.jl")
 
 """
     from_table(table; unit, time, outcome, predictors, treated, treatment_time, kwargs...)
@@ -198,6 +259,59 @@ function path_table(args...; kwargs...)
 end
 
 """
+    diagnostics_table(fit; weight_sum_tolerance=nothing)
+
+Return a one-row Tables.jl-compatible table of stable fit diagnostics after
+loading Tables.jl. See [`fit_diagnostics`](@ref) for definitions and weight
+validation. This fallback throws unless the Tables extension is active.
+
+# Examples
+
+```julia
+using SyntheticControl
+isdefined(SyntheticControl, :diagnostics_table)
+```
+"""
+function diagnostics_table(args...; kwargs...)
+  throw(ArgumentError("diagnostics_table requires loading Tables.jl: run `using SyntheticControl, Tables`"))
+end
+
+"""
+    predictor_diagnostics_table(fit; weight_sum_tolerance=nothing)
+
+Return one Tables.jl-compatible row per predictor after loading Tables.jl.
+See [`predictor_diagnostics`](@ref) for the stable statistical definitions.
+This fallback throws unless the Tables extension is active.
+
+# Examples
+
+```julia
+using SyntheticControl
+isdefined(SyntheticControl, :predictor_diagnostics_table)
+```
+"""
+function predictor_diagnostics_table(args...; kwargs...)
+  throw(ArgumentError("predictor_diagnostics_table requires loading Tables.jl: run `using SyntheticControl, Tables`"))
+end
+
+"""
+    robustness_summary(suite::RobustnessSuiteResult)
+
+Return one Tables.jl-compatible status row for each suite component after
+loading Tables.jl. The fallback throws unless the Tables extension is active.
+
+# Examples
+
+```julia
+using SyntheticControl
+isdefined(SyntheticControl, :robustness_summary)
+```
+"""
+function robustness_summary(args...; kwargs...)
+  throw(ArgumentError("robustness_summary requires loading Tables.jl: run `using SyntheticControl, Tables`"))
+end
+
+"""
     placebo_summary(result::InSpacePlaceboResult)
 
 Return the stable Tables.jl summary for an in-space placebo result after
@@ -246,6 +360,191 @@ isdefined(SyntheticControl, :in_time_summary)
 """
 function in_time_summary(args...; kwargs...)
   throw(ArgumentError("in_time_summary requires loading Tables.jl: run `using SyntheticControl, Tables`"))
+end
+
+"""
+    placebo_paths(result::InSpacePlaceboResult)
+
+Return the stored treated and in-space placebo paths as a long
+Tables.jl-compatible table after loading Tables.jl. Successful assignments
+retain every stored period; failed assignments retain one sentinel row.
+This fallback throws unless the Tables extension is active and never refits.
+
+# Examples
+
+```julia
+using SyntheticControl
+isdefined(SyntheticControl, :placebo_paths)
+```
+"""
+function placebo_paths(args...; kwargs...)
+  throw(ArgumentError("placebo_paths requires loading Tables.jl: run `using SyntheticControl, Tables`"))
+end
+
+"""
+    leave_one_out_paths(result::LeaveOneOutResult)
+
+Return stored leave-one-out refit paths as a long Tables.jl-compatible table
+after loading Tables.jl. Failed assignments retain one sentinel row. The
+baseline path remains available as `result.original_path`. This fallback
+throws unless the Tables extension is active and never refits.
+
+# Examples
+
+```julia
+using SyntheticControl
+isdefined(SyntheticControl, :leave_one_out_paths)
+```
+"""
+function leave_one_out_paths(args...; kwargs...)
+  throw(ArgumentError("leave_one_out_paths requires loading Tables.jl: run `using SyntheticControl, Tables`"))
+end
+
+"""
+    in_time_paths(result::InTimePlaceboResult)
+
+Return stored in-time placebo paths as a long Tables.jl-compatible table
+after loading Tables.jl. Failed pseudo-dates retain one sentinel row. This
+fallback throws unless the Tables extension is active and never refits.
+
+# Examples
+
+```julia
+using SyntheticControl
+isdefined(SyntheticControl, :in_time_paths)
+```
+"""
+function in_time_paths(args...; kwargs...)
+  throw(ArgumentError("in_time_paths requires loading Tables.jl: run `using SyntheticControl, Tables`"))
+end
+
+"""
+    pointwise_placebo_summary(result::PointwisePlaceboInferenceResult)
+
+Return the stable Tables.jl pointwise-inference summary after loading
+Tables.jl. This fallback throws unless the Tables extension is active and
+never recalculates inference.
+
+# Examples
+
+```julia
+using SyntheticControl
+isdefined(SyntheticControl, :pointwise_placebo_summary)
+```
+"""
+function pointwise_placebo_summary(args...; kwargs...)
+  throw(ArgumentError("pointwise_placebo_summary requires loading Tables.jl: run `using SyntheticControl, Tables`"))
+end
+
+"""
+    aggregate_placebo_summary(result::AggregatePlaceboInferenceResult)
+
+Return the stable one-row Tables.jl aggregate-inference summary after loading
+Tables.jl. This fallback throws unless the Tables extension is active and
+never recalculates inference.
+
+# Examples
+
+```julia
+using SyntheticControl
+isdefined(SyntheticControl, :aggregate_placebo_summary)
+```
+"""
+function aggregate_placebo_summary(args...; kwargs...)
+  throw(ArgumentError("aggregate_placebo_summary requires loading Tables.jl: run `using SyntheticControl, Tables`"))
+end
+
+"""
+    specification_definitions(result::SpecificationSensitivityResult)
+
+Return specification definitions as a Tables.jl-compatible table after
+loading Tables.jl. This fallback throws unless the extension is active.
+
+# Examples
+
+```julia
+using SyntheticControl
+isdefined(SyntheticControl, :specification_definitions)
+```
+"""
+function specification_definitions(args...; kwargs...)
+  throw(ArgumentError("specification_definitions requires loading Tables.jl: run `using SyntheticControl, Tables`"))
+end
+
+
+"""
+    specification_diagnostics(result::SpecificationSensitivityResult)
+
+Return one diagnostic row per specification after loading Tables.jl. Failed
+specifications use typed missing diagnostic values. This fallback throws
+unless the extension is active.
+
+# Examples
+
+```julia
+using SyntheticControl
+isdefined(SyntheticControl, :specification_diagnostics)
+```
+"""
+function specification_diagnostics(args...; kwargs...)
+  throw(ArgumentError("specification_diagnostics requires loading Tables.jl: run `using SyntheticControl, Tables`"))
+end
+
+
+"""
+    specification_paths(result::SpecificationSensitivityResult)
+
+Return stored specification paths in long Tables.jl form after loading
+Tables.jl. Failed specifications contribute one sentinel row. This fallback
+throws unless the extension is active and never refits.
+
+# Examples
+
+```julia
+using SyntheticControl
+isdefined(SyntheticControl, :specification_paths)
+```
+"""
+function specification_paths(args...; kwargs...)
+  throw(ArgumentError("specification_paths requires loading Tables.jl: run `using SyntheticControl, Tables`"))
+end
+
+
+"""
+    specification_weights(result::SpecificationSensitivityResult)
+
+Return stored donor weights in long Tables.jl form after loading Tables.jl.
+Failed specifications contribute one sentinel row. This fallback throws
+unless the extension is active and never refits.
+
+# Examples
+
+```julia
+using SyntheticControl
+isdefined(SyntheticControl, :specification_weights)
+```
+"""
+function specification_weights(args...; kwargs...)
+  throw(ArgumentError("specification_weights requires loading Tables.jl: run `using SyntheticControl, Tables`"))
+end
+
+
+"""
+    specification_balance(result::SpecificationSensitivityResult)
+
+Return stored predictor balance and predictor weights in long Tables.jl form
+after loading Tables.jl. Failed specifications contribute one sentinel row.
+This fallback throws unless the extension is active and never refits.
+
+# Examples
+
+```julia
+using SyntheticControl
+isdefined(SyntheticControl, :specification_balance)
+```
+"""
+function specification_balance(args...; kwargs...)
+  throw(ArgumentError("specification_balance requires loading Tables.jl: run `using SyntheticControl, Tables`"))
 end
 
 

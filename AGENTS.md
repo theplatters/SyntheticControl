@@ -7,6 +7,9 @@ This is a Julia package named `SyntheticControl`.
 - `src/SyntheticControl.jl`: main package module, public types, solver implementation, and internal optimization caches.
 - `src/visualization.jl`: backend-independent visualization data containers, statistical helpers, and public Makie plotting entry points.
 - `src/robustness.jl`: panel metadata, robustness result types, refitting logic, failure records, RMSPE inference, and public robustness APIs.
+- `src/suite.jl`: unified robustness options, component orchestration, suite states, and the typed suite result.
+- `src/diagnostics.jl`: typed fit and predictor diagnostics, weight validation, and solver-metadata reporting independent of Tables.jl.
+- `src/specification.jl`: typed SCM specifications, sensitivity refitting, configuration projection, failure records, and convenience grids.
 - `ext/SyntheticControlMakieExt.jl`: Makie weak-dependency extension defining full recipes and `Makie.plot!` implementations.
 - `ext/SyntheticControlTablesExt.jl`: Tables.jl weak-dependency extension for long-format panel input and table-shaped result output. It activates only after both `using SyntheticControl` and `using Tables`.
 - `test/runtests.jl`: package test suite using Julia `Test`.
@@ -92,9 +95,15 @@ Public recipe attributes include:
 
 Makie `plot!` methods must not create `Figure` or `Axis` objects and must not overwrite user-provided axis titles, labels, ticks, limits, or scales. Non-mutating calls may provide default SCM axis labels through Makie's axis-hint mechanisms, but explicit `axis=(; ...)` values and mutating calls into an existing `Axis` must win. Propagate recipe attributes to child plots as observables, use `@inherit` for Makie-wide defaults such as `linewidth`, `markersize`, `marker`, and `fontsize`, and validate only recipe-specific constraints such as non-negative line widths and opacity values in `[0, 1]`.
 
-Tables.jl integration must stay in `ext/SyntheticControlTablesExt.jl`; the core package only declares generic public hooks. The public table API is `from_table`, `weights_table`, `balance_table`, and `path_table`. `from_table` accepts Tables.jl-compatible long panels with unit, time, outcome, and predictor columns selected by `Symbol` or `String`. It materializes the complete panel once, rejects duplicate `(unit, time)` observations, unbalanced panels, missing/non-finite numeric values, non-numeric outcomes or predictors, unknown columns, absent treated units, empty donor pools, and treatment times outside observed values. It sorts time values and donor identifiers explicitly so row order does not affect results.
+Tables.jl integration must stay in `ext/SyntheticControlTablesExt.jl`; the core package only declares generic public hooks. The public table API includes panel construction, fit reporting, robustness summaries, and robustness long paths. `from_table` accepts Tables.jl-compatible long panels with unit, time, outcome, and predictor columns selected by `Symbol` or `String`. It materializes the complete panel once, rejects duplicate `(unit, time)` observations, unbalanced panels, missing/non-finite numeric values, non-numeric outcomes or predictors, unknown columns, absent treated units, empty donor pools, and treatment times outside observed values. It sorts time values and donor identifiers explicitly so row order does not affect results.
 
 Tables matrix orientation conventions are fixed: `X1` is length `K`, `X0` is `K × J`, `Y1` is length `T_pre`, and `Y0` is `T_pre × J`. Predictor columns are mean-aggregated over pre-treatment observations only, where times before `treatment_time` are pre-treatment and `treatment_time` is the first post-treatment period. `weights_table` returns `donor, weight`; `balance_table` returns `predictor, treated, synthetic, difference`; `path_table` returns `time, actual, synthetic, gap, post_treatment`. Return lightweight Tables.jl-compatible objects, not DataFrames or other concrete sink types.
+
+Fit diagnostics use `fit_diagnostics` and `predictor_diagnostics` in core;
+Tables reporting uses `diagnostics_table` and `predictor_diagnostics_table`.
+Diagnostics never normalize weights: accepted weights are finite,
+nonnegative, and sum to one within the documented tolerance. Solver metadata
+that is not retained by a fit is reported as typed `missing`, not inferred.
 
 ## Testing Guidelines
 
@@ -133,14 +142,49 @@ exactly one donor and has no p-value. In-time fitting uses only observations
 before the pseudo-date and, by default, evaluation stops before real
 treatment; windows count observed periods rather than calendar distance.
 
-Tables robustness methods are `placebo_summary`, `leave_one_out_summary`, and
-`in_time_summary`. Makie consumes stored results through `placeboplot`,
+Time-specific in-space inference uses `pointwise_placebo_inference` and
+`aggregate_placebo_inference`, returning `PointwisePlaceboInferenceResult`
+and `AggregatePlaceboInferenceResult`. Denominators include the treated
+assignment, ties count as extreme, and eligible placebos inherit stored
+in-space filtering and must share the exact treated evaluation window.
+Two-sided tests rank absolute statistics. Aggregate windows select observed
+post-treatment values without calendar arithmetic. Pointwise results are not
+simultaneous inference.
+
+Specification sensitivity uses `SCMSpecification` and
+`specification_sensitivity`. Its independent dimensions are outcome fitting
+periods, omitted predictors, predictor aggregation periods, and donor pools.
+Unspecified dimensions remain baseline. Every successful refit uses an
+independent standard estimator problem and the same full-panel evaluation
+path; invalid or failed specifications remain stored with
+`on_failure=:record`.
+
+Tables robustness methods are `placebo_summary`, `leave_one_out_summary`,
+`in_time_summary`, `placebo_paths`, `leave_one_out_paths`, and `in_time_paths`.
+Inference reporting uses `pointwise_placebo_summary` and
+`aggregate_placebo_summary` without recalculation.
+Specification reporting uses `specification_definitions`,
+`specification_diagnostics`, `specification_paths`, `specification_weights`,
+and `specification_balance`; these functions consume stored results only.
+Successful long-path rows preserve stored assignment/time ordering and native
+identifier types; filtered paths remain complete, while each failed analysis
+emits one missing-valued sentinel row with its status and failure reason.
+Path-table construction must never refit or recalculate stored gaps. Makie consumes stored results through `placeboplot`,
 `placebodistribution`, `leaveoneoutplot`, and `intimeplaceboplot`; recipes must
 never refit or calculate statistics. Future robustness changes require tests
 for reassignment, donor composition, windows, failures, zero/non-finite RMSPE,
 exact ranks and ties, generic times, table schemas, recipe construction, and
 serial/parallel equivalence. Update `docs/src/robustness.md`, relevant
 docstrings, Tables docs, and visualization docs, then run full tests and docs.
+
+The unified orchestration API is `robustness_suite`, returning
+`RobustnessSuiteResult`. It calls the standalone component APIs and retains
+their native result objects; disabled, skipped, and suite-level failed
+components are distinguished by `RobustnessAnalysisState`. Suite reporting is
+`diagnostics_table(suite)` and `robustness_summary(suite)` and consumes stored
+results only. Fits returned by `solve` retain their originating problem
+association for the fit-only suite form; manually constructed fits use the
+explicit `(problem, fit)` method.
 
 ## Commit & Pull Request Guidelines
 

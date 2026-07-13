@@ -195,6 +195,373 @@ struct InTimePlaceboResult{T<:AbstractFloat,UI,TT}
   minimum_post_periods::Int
 end
 
+"""
+    PointwisePlaceboInferenceResult{T,UI,TT}
+
+Typed finite-sample inference results for individual post-treatment periods.
+`source` retains every original assignment and exclusion record;
+`included_assignments` identifies the placebo columns of
+`placebo_statistics`. `assignment_count` includes the treated assignment.
+These p-values are pointwise and do not provide simultaneous inference.
+
+# Examples
+
+```julia
+isdefined(SyntheticControl, :PointwisePlaceboInferenceResult)
+```
+"""
+struct PointwisePlaceboInferenceResult{T<:AbstractFloat,UI,TT}
+  source::InSpacePlaceboResult{T,UI,TT}
+  statistic::Symbol
+  alternative::Symbol
+  time::Vector{TT}
+  treated_statistic::Vector{T}
+  placebo_statistics::Matrix{T}
+  included_assignments::Vector{UI}
+  extreme_count::Vector{Int}
+  assignment_count::Int
+  p_value::Vector{T}
+end
+
+"""
+    AggregatePlaceboInferenceResult{T,UI,TT,S}
+
+Typed finite-sample inference for one post-treatment aggregate. `source`
+retains all attempted and excluded assignments. `specification` is the
+requested statistic symbol or callable, `statistic` is its stable reporting
+name, and `periods` is the selected observed-time window.
+
+# Examples
+
+```julia
+isdefined(SyntheticControl, :AggregatePlaceboInferenceResult)
+```
+"""
+struct AggregatePlaceboInferenceResult{T<:AbstractFloat,UI,TT,S}
+  source::InSpacePlaceboResult{T,UI,TT}
+  specification::S
+  statistic::Symbol
+  alternative::Symbol
+  periods::Vector{TT}
+  treated_statistic::T
+  placebo_statistics::Vector{T}
+  included_assignments::Vector{UI}
+  extreme_count::Int
+  assignment_count::Int
+  p_value::T
+end
+
+"""
+    _validate_placebo_alternative(alternative)
+
+Validate and return one of `:greater`, `:less`, or `:two_sided`.
+
+# Examples
+
+```julia
+SyntheticControl._validate_placebo_alternative(:greater) == :greater
+```
+"""
+function _validate_placebo_alternative(alternative::Symbol)
+  alternative in (:greater, :less, :two_sided) ||
+    throw(ArgumentError("alternative must be :greater, :less, or :two_sided"))
+  return alternative
+end
+
+"""
+    _validate_inference_path(refit, label)
+
+Validate a successful stored robustness path for inference and return it.
+The path must have aligned time, actual, synthetic, and gap vectors and a
+valid first post-treatment index. No values are recalculated.
+
+# Examples
+
+```julia
+isdefined(SyntheticControl, :_validate_inference_path)
+```
+"""
+function _validate_inference_path(refit::RobustnessRefit, label::AbstractString)
+  refit.solver_status === :success || throw(ArgumentError("$label must be a successful stored fit"))
+  path_length = length(refit.time)
+  length(refit.actual) == path_length || throw(DimensionMismatch("$label actual path must match time"))
+  length(refit.synthetic) == path_length || throw(DimensionMismatch("$label synthetic path must match time"))
+  length(refit.gap) == path_length || throw(DimensionMismatch("$label gap path must match time"))
+  1 <= refit.treatment_index <= path_length ||
+    throw(ArgumentError("$label treatment_index must identify the first post-treatment period"))
+  return refit
+end
+
+"""
+    _eligible_placebo_inference_refits(result)
+
+Return stored placebo refits eligible for time-specific inference. Failed and
+filtered assignments and assignments with non-finite gaps are excluded.
+Every otherwise eligible placebo must have the treated assignment's exact
+time vector and treatment index. Throws when the treated path is invalid or
+no placebo remains.
+
+# Examples
+
+```julia
+isdefined(SyntheticControl, :_eligible_placebo_inference_refits)
+```
+"""
+function _eligible_placebo_inference_refits(result::InSpacePlaceboResult)
+  treated = _validate_inference_path(result.treated, "treated assignment")
+  all(isfinite, treated.gap) || throw(ArgumentError("treated gaps must be finite for inference"))
+  eligible = RobustnessRefit[]
+  for refit in result.refits
+    refit.solver_status === :success || continue
+    refit.included || continue
+    _validate_inference_path(refit, "placebo assignment $(refit.assignment)")
+    refit.time == treated.time ||
+      throw(ArgumentError("included placebo assignment $(refit.assignment) does not share the treated time window"))
+    refit.treatment_index == treated.treatment_index ||
+      throw(ArgumentError("included placebo assignment $(refit.assignment) does not share the treated treatment index"))
+    all(isfinite, refit.gap) || continue
+    push!(eligible, refit)
+  end
+  isempty(eligible) && throw(ArgumentError("no eligible placebo assignments remain for inference"))
+  return eligible
+end
+
+"""
+    _placebo_extreme_count(placebo_values, treated_value, alternative)
+
+Count the treated assignment plus placebo statistics at least as extreme as
+the treated statistic. `:greater` uses `>=`, `:less` uses `<=`, and
+`:two_sided` compares absolute values with `>=`, so ties always count.
+
+# Examples
+
+```julia
+SyntheticControl._placebo_extreme_count([1.0, 2.0], 2.0, :greater) == 2
+```
+"""
+function _placebo_extreme_count(placebo_values, treated_value, alternative::Symbol)
+  alternative = _validate_placebo_alternative(alternative)
+  if alternative === :greater
+    return 1 + count(value -> value >= treated_value, placebo_values)
+  elseif alternative === :less
+    return 1 + count(value -> value <= treated_value, placebo_values)
+  end
+  threshold = abs(treated_value)
+  return 1 + count(value -> abs(value) >= threshold, placebo_values)
+end
+
+"""
+    _pointwise_statistic(gap, statistic)
+
+Return `gap` for `statistic=:gap` or `abs(gap)` for
+`statistic=:absolute_gap`. Throws for unsupported statistics.
+
+# Examples
+
+```julia
+SyntheticControl._pointwise_statistic(-2.0, :absolute_gap) == 2.0
+```
+"""
+function _pointwise_statistic(gap::T, statistic::Symbol) where {T<:AbstractFloat}
+  statistic === :gap && return gap
+  statistic === :absolute_gap && return abs(gap)
+  throw(ArgumentError("statistic must be :gap or :absolute_gap"))
+end
+
+"""
+    pointwise_placebo_inference(result; statistic=:gap, alternative=:greater)
+
+Calculate exact finite-sample placebo p-values for every post-treatment
+period stored in an [`InSpacePlaceboResult`](@ref). `statistic=:gap` ranks
+signed gaps and `:absolute_gap` ranks absolute gaps. Alternatives are
+`:greater`, `:less`, and `:two_sided`; two-sided inference ranks the absolute
+value of the selected statistic.
+
+The denominator contains the treated assignment and every successful,
+inference-included placebo with the identical evaluation window and finite
+gaps. Ties count as extreme. Failed, filtered, and non-finite placebos remain
+stored in `result` but are excluded. The minimum p-value is
+`1 / assignment_count`. Returned p-values are pointwise, not multiplicity
+adjusted or simultaneous. Throws `ArgumentError` when the inference set or
+stored windows are invalid and does not mutate or refit `result`.
+
+# Examples
+
+```julia
+using SyntheticControl, CommonSolve, Tables
+panel = (unit=repeat([:t, :a, :b], inner=4), time=repeat(1:4, 3),
+         y=[2.,3,5,7, 1,2,3,4, 3,4,5,6], x=[2.,3,4,5, 1,2,3,4, 3,4,5,6])
+problem = from_table(panel; unit=:unit, time=:time, outcome=:y,
+                     predictors=[:x], treated=:t, treatment_time=3)
+inference = pointwise_placebo_inference(in_space_placebos(problem, solve(problem)))
+length(inference.p_value) == 2
+```
+"""
+function pointwise_placebo_inference(
+  result::InSpacePlaceboResult{T,UI,TT};
+  statistic::Symbol=:gap,
+  alternative::Symbol=:greater
+) where {T,UI,TT}
+  statistic in (:gap, :absolute_gap) || throw(ArgumentError("statistic must be :gap or :absolute_gap"))
+  alternative = _validate_placebo_alternative(alternative)
+  treated = result.treated
+  eligible = _eligible_placebo_inference_refits(result)
+  post_indices = collect(treated.treatment_index:length(treated.time))
+  time = collect(treated.time[post_indices])
+  treated_statistic = T[_pointwise_statistic(treated.gap[index], statistic) for index in post_indices]
+  placebo_statistics = Matrix{T}(undef, length(post_indices), length(eligible))
+  for (column, refit) in pairs(eligible)
+    for (row, index) in pairs(post_indices)
+      placebo_statistics[row, column] = _pointwise_statistic(refit.gap[index], statistic)
+    end
+  end
+  assignment_count = 1 + length(eligible)
+  extreme_count = Vector{Int}(undef, length(post_indices))
+  p_value = Vector{T}(undef, length(post_indices))
+  for row in eachindex(post_indices)
+    extreme_count[row] = _placebo_extreme_count(
+      @view(placebo_statistics[row, :]), treated_statistic[row], alternative,
+    )
+    p_value[row] = T(extreme_count[row] / assignment_count)
+  end
+  return PointwisePlaceboInferenceResult(
+    result, statistic, alternative, time, treated_statistic, placebo_statistics,
+    UI[refit.assignment for refit in eligible], extreme_count, assignment_count, p_value,
+  )
+end
+
+"""
+    _selected_aggregate_period_indices(treated, periods)
+
+Resolve an aggregate window to unique post-treatment indices in observed-time
+order. `periods=nothing` selects every post-treatment period. Explicit values
+must be known post-treatment observations and need not be consecutive.
+
+# Examples
+
+```julia
+isdefined(SyntheticControl, :_selected_aggregate_period_indices)
+```
+"""
+function _selected_aggregate_period_indices(treated::RobustnessRefit, periods)
+  post_indices = collect(treated.treatment_index:length(treated.time))
+  periods === nothing && return post_indices
+  selected = collect(periods)
+  isempty(selected) && throw(ArgumentError("periods must select at least one post-treatment observation"))
+  length(unique(selected)) == length(selected) || throw(ArgumentError("periods contains duplicates"))
+  indices = Int[]
+  for index in post_indices
+    treated.time[index] in selected && push!(indices, index)
+  end
+  length(indices) == length(selected) ||
+    throw(ArgumentError("periods must contain only observed post-treatment values"))
+  return indices
+end
+
+"""
+    _aggregate_placebo_statistic(gaps, times, statistic, T)
+
+Evaluate a predefined or callable aggregate and return a finite value of type
+`T`. Predefined symbols are `:mean_gap`, `:cumulative_gap`,
+`:mean_absolute_gap`, and `:rmspe`. A callable receives copies of `(gaps,
+times)` when applicable, otherwise a copy of `gaps`, so it cannot mutate
+stored result paths.
+
+# Examples
+
+```julia
+SyntheticControl._aggregate_placebo_statistic([1.0, 3.0], [2, 5], :mean_gap, Float64) == 2.0
+```
+"""
+function _aggregate_placebo_statistic(gaps, times, statistic, ::Type{T}) where {T<:AbstractFloat}
+  value = if statistic === :mean_gap
+    sum(gaps) / T(length(gaps))
+  elseif statistic === :cumulative_gap
+    sum(gaps)
+  elseif statistic === :mean_absolute_gap
+    sum(abs, gaps) / T(length(gaps))
+  elseif statistic === :rmspe
+    _rmspe(gaps)
+  elseif !(statistic isa Symbol)
+    gap_copy = collect(gaps)
+    time_copy = collect(times)
+    if applicable(statistic, gap_copy, time_copy)
+      statistic(gap_copy, time_copy)
+    elseif applicable(statistic, gap_copy)
+      statistic(gap_copy)
+    else
+      throw(ArgumentError("custom aggregate statistic must accept gaps or gaps and times"))
+    end
+  else
+    throw(ArgumentError("statistic must be :mean_gap, :cumulative_gap, :mean_absolute_gap, :rmspe, or a callable"))
+  end
+  value isa Real || throw(ArgumentError("aggregate statistic must return a real scalar"))
+  converted = T(value)
+  isfinite(converted) || throw(ArgumentError("aggregate statistic must return a finite scalar"))
+  return converted
+end
+
+"""
+    aggregate_placebo_inference(result; statistic=:mean_gap, periods=nothing,
+                                alternative=:greater)
+
+Calculate exact finite-sample placebo inference for one post-treatment
+aggregate. Predefined statistics are `:mean_gap`, `:cumulative_gap`,
+`:mean_absolute_gap`, and `:rmspe`. A callable may accept `(gaps, times)` or
+`gaps`; it receives copies. `periods` selects observed post-treatment values
+without assuming consecutive or integer time.
+
+The treated assignment and all eligible placebo assignments use the same
+selected window. Alternatives and ties follow
+[`pointwise_placebo_inference`](@ref). Failed, filtered, non-finite, and
+incomparable assignments do not silently enter the denominator; mismatched
+stored windows throw. Returns an [`AggregatePlaceboInferenceResult`](@ref),
+does not refit, and does not mutate stored paths.
+
+# Examples
+
+```julia
+using SyntheticControl, CommonSolve, Tables
+panel = (unit=repeat([:t, :a, :b], inner=4), time=repeat(1:4, 3),
+         y=[2.,3,5,7, 1,2,3,4, 3,4,5,6], x=[2.,3,4,5, 1,2,3,4, 3,4,5,6])
+problem = from_table(panel; unit=:unit, time=:time, outcome=:y,
+                     predictors=[:x], treated=:t, treatment_time=3)
+inference = aggregate_placebo_inference(
+  in_space_placebos(problem, solve(problem)); statistic=:cumulative_gap,
+)
+0 < inference.p_value <= 1
+```
+"""
+function aggregate_placebo_inference(
+  result::InSpacePlaceboResult{T,UI,TT};
+  statistic=:mean_gap,
+  periods=nothing,
+  alternative::Symbol=:greater
+) where {T,UI,TT}
+  alternative = _validate_placebo_alternative(alternative)
+  treated = result.treated
+  eligible = _eligible_placebo_inference_refits(result)
+  indices = _selected_aggregate_period_indices(treated, periods)
+  selected_times = collect(treated.time[indices])
+  treated_statistic = _aggregate_placebo_statistic(
+    @view(treated.gap[indices]), selected_times, statistic, T,
+  )
+  placebo_statistics = Vector{T}(undef, length(eligible))
+  for (position, refit) in pairs(eligible)
+    placebo_statistics[position] = _aggregate_placebo_statistic(
+      @view(refit.gap[indices]), selected_times, statistic, T,
+    )
+  end
+  extreme_count = _placebo_extreme_count(placebo_statistics, treated_statistic, alternative)
+  assignment_count = 1 + length(eligible)
+  statistic_name = statistic isa Symbol ? statistic : :custom
+  return AggregatePlaceboInferenceResult(
+    result, statistic, statistic_name, alternative, selected_times, treated_statistic,
+    placebo_statistics, UI[refit.assignment for refit in eligible], extreme_count,
+    assignment_count, T(extreme_count / assignment_count),
+  )
+end
+
 
 function _validate_original(problem, result)
   result.data === problem.data || throw(ArgumentError("problem and solution must reference the same SyntheticControlData"))

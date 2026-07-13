@@ -18,7 +18,10 @@ include("data_generator.jl")
 using .DataGenerator
 include("visualization_tests.jl")
 include("tables_extension_tests.jl")
+include("diagnostics_tests.jl")
 include("robustness_tests.jl")
+include("specification_tests.jl")
+include("suite_tests.jl")
 
 function ipnewton_inner_solution(prob::Union{SyntheticControl.SyntheticControlData,SyntheticControl.SyntheticControlProblem}, raw_v)
     data = prob isa SyntheticControl.SyntheticControlProblem ? prob.data : prob
