@@ -16,11 +16,42 @@ const DEFAULT_MAX_TRANSFER_RECEIVERS = 8
 const DEFAULT_MIN_RELATIVE_MSPE_IMPROVEMENT = 0.01
 
 """
+    SyntheticControlData(X1, Y1, X0, Y0, predictor_names, donor_ids, treated_id)
     SyntheticControlData{T<:AbstractFloat}
 
 Holds the cleanly aligned matrices and vectors used by synthetic control
 estimators. Solver-specific problem types, such as the classic
 `SyntheticControlProblem`, wrap this shared data interface.
+
+`X1` is the treated-unit predictor vector with length `K`, `Y1` is the
+treated-unit pre-treatment outcome vector with length `T_pre`, `X0` is the
+`K × J` donor predictor matrix, and `Y0` is the `T_pre × J` donor outcome
+matrix. `predictor_names` and `donor_ids` must have lengths `K` and `J`.
+All numeric inputs must have the same concrete floating-point element type,
+be finite, and every predictor row must have non-zero cross-unit variation.
+
+The constructor returns a `SyntheticControlData{T}` and stores standardized
+predictors in `X1_normalized` and `X0_normalized`. It throws
+`DimensionMismatch` for inconsistent shapes and `ArgumentError` for
+non-finite values or near-zero predictor variance. Construction has no side
+effects.
+
+# Examples
+
+```julia
+using SyntheticControl
+
+data = SyntheticControlData(
+  [1.0, 2.0],
+  [10.0, 11.0, 12.0],
+  [0.8 1.4 2.0; 1.6 2.2 2.8],
+  [9.0 10.5 12.0; 10.0 11.5 13.0; 11.0 12.5 14.0],
+  ["level", "trend"],
+  ["A", "B", "C"],
+  "treated",
+)
+size(data.X0) == (2, 3)
+```
 """
 struct SyntheticControlData{T<:AbstractFloat}
   # 1. Target Data (Treated Unit)
